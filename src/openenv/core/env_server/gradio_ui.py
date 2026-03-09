@@ -164,7 +164,20 @@ def build_gradio_app(
                             if field_type == "checkbox":
                                 inp = gr.Checkbox(label=label)
                             elif field_type == "number":
-                                inp = gr.Number(label=label)
+                                step_value = field.get("multiple_of")
+                                if step_value is None:
+                                    step_value = (
+                                        1
+                                        if field.get("schema_type") == "integer"
+                                        else 1e-6
+                                    )
+                                inp = gr.Number(
+                                    label=label,
+                                    value=field.get("default_value"),
+                                    minimum=field.get("min_value"),
+                                    maximum=field.get("max_value"),
+                                    step=step_value,
+                                )
                             elif field_type == "select":
                                 choices = field.get("choices") or []
                                 inp = gr.Dropdown(
