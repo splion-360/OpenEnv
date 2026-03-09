@@ -38,11 +38,15 @@ except Exception as e:  # pragma: no cover
         "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
     ) from e
 
-# Import from local models.py (PYTHONPATH includes /app/env in Docker)
-from models import PickAndPlaceAction, PickAndPlaceObservation
+try:
+    from ..models import PickAndPlaceAction, PickAndPlaceObservation
+    from .gradio_ui import build_pick_and_place_gradio_app
+    from .pick_and_place_env_environment import PickAndPlaceEnvironment
+except ImportError:
+    from models import PickAndPlaceAction, PickAndPlaceObservation
 
-from .gradio_ui import build_pick_and_place_gradio_app
-from .pick_and_place_env_environment import PickAndPlaceEnvironment
+    from .gradio_ui import build_pick_and_place_gradio_app
+    from .pick_and_place_env_environment import PickAndPlaceEnvironment
 
 _logger = logging.getLogger(__name__)
 _sig = inspect.signature(create_app)
@@ -70,7 +74,7 @@ else:
     )
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+def run_server(host: str = "0.0.0.0", port: int = 8000):
     """
     Entry point for direct execution via uv run or python -m.
 
@@ -92,10 +96,15 @@ def main(host: str = "0.0.0.0", port: int = 8000):
     uvicorn.run(app, host=host, port=port)
 
 
+def main():
+    """Zero-argument entry point expected by OpenEnv validation and project scripts."""
+    run_server()
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    main(port=args.port)
+    run_server(port=args.port)

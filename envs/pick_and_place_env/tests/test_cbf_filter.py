@@ -10,7 +10,7 @@ from pick_and_place_env.models import PickAndPlaceAction
 from pick_and_place_env.server.pick_and_place_env_environment import (
     PickAndPlaceEnvironment,
 )
-from pick_and_place_env.simulator import FetchPickAndPlaceSimulator
+from pick_and_place_env.simulator import FETCH, FetchPickAndPlaceSimulator
 
 
 def test_simulator_peek_step_restores_state() -> None:
@@ -67,3 +67,33 @@ def test_environment_step_filters_unsafe_nominal_action() -> None:
         assert observation.metadata["cbf_scale"] == environment.state.cbf_scale
     finally:
         environment._simulator.close()
+
+
+def test_compute_joint_limit_margin_matches_limited_fetch_joints() -> None:
+    simulator = FetchPickAndPlaceSimulator()
+    try:
+        snapshot = simulator.reset(seed=0)
+        env = simulator._env.unwrapped
+
+        limited_joint_margins = []
+        for joint_name, joint_angle in zip(
+            FETCH.arm_joint_names,
+            snapshot.proprioception.joint_angles,
+        ):
+            joint_id = env._model_names.joint_name2id[joint_name]
+            if not bool(env.model.jnt_limited[joint_id]):
+                continue
+
+            lower_limit, upper_limit = env.model.jnt_range[joint_id]
+            limited_joint_margins.append(
+                min(joint_angle - lower_limit, upper_limit - joint_angle)
+            )
+
+        computed_margin = simulator.compute_joint_limit_margin(
+            snapshot.proprioception.joint_angles
+        )
+
+        assert len(limited_joint_margins) == 4
+        assert np.isclose(computed_margin, min(limited_joint_margins))
+    finally:
+        simulator.close()
