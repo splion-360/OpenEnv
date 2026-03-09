@@ -156,8 +156,17 @@ class PickAndPlaceEnvironment(Environment):
             episode_id=episode_id,
             obs_mode=obs_mode,
         )
+        rgb_overhead, rgb_wrist = self._simulator.render_observation_images(
+            self._state.obs_mode
+        )
 
-        return build_observation(self._state, reward=0.0, done=False)
+        return build_observation(
+            self._state,
+            reward=0.0,
+            done=False,
+            rgb_overhead=rgb_overhead,
+            rgb_wrist=rgb_wrist,
+        )
 
     def step(
         self,
@@ -211,12 +220,17 @@ class PickAndPlaceEnvironment(Environment):
 
         done = self._state.success or snapshot.terminated or snapshot.truncated
         echoed_message = action.message or ""
+        rgb_overhead, rgb_wrist = self._simulator.render_observation_images(
+            self._state.obs_mode
+        )
 
         return build_observation(
             self._state,
             reward=reward,
             done=done,
             echoed_message=echoed_message,
+            rgb_overhead=rgb_overhead,
+            rgb_wrist=rgb_wrist,
         )
 
     def __del__(self) -> None:

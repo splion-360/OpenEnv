@@ -4,10 +4,14 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import base64
+import io
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from PIL import Image
+from gymnasium.envs.mujoco.mujoco_rendering import MujocoRenderer
 
 try:
     import gymnasium as gym
@@ -40,6 +44,10 @@ class FetchConfig:
     env_id: str = "FetchPickAndPlace-v4"
     position_action_scale_meters: float = 0.05
     grip_site_name: str = "robot0:grip"
+    overhead_camera_name: str = "external_camera_0"
+    wrist_camera_name: str = "gripper_camera_rgb"
+    render_width: int = 224
+    render_height: int = 224
     object_geom_name: str = "object0"
     finger_geom_names: tuple[str, str] = (
         "robot0:r_gripper_finger_link",
@@ -84,6 +92,7 @@ class FetchPickAndPlaceSimulator:
             FETCH.env_id,
             max_episode_steps=max_episode_steps,
         )
+        self._renderers: dict[str, MujocoRenderer] = {}
 
     def reset(self, seed: int | None = None) -> SimulatorSnapshot:
         observation, info = self._env.reset(seed=seed)
@@ -108,6 +117,9 @@ class FetchPickAndPlaceSimulator:
         )
 
     def close(self) -> None:
+        for renderer in self._renderers.values():
+            renderer.close()
+        self._renderers.clear()
         self._env.close()
 
     @property
@@ -121,6 +133,18 @@ class FetchPickAndPlaceSimulator:
     @property
     def position_action_scale_meters(self) -> float:
         return FETCH.position_action_scale_meters
+
+    def render_observation_images(
+        self,
+        obs_mode: cfg.ObsMode,
+    ) -> tuple[str | None, str | None]:
+        if obs_mode == cfg.ObsMode.STATE:
+            return None, None
+
+        return (
+            self._render_camera(FETCH.overhead_camera_name),
+            self._render_camera(FETCH.wrist_camera_name),
+        )
 
     def _to_env_action(self, action: PickAndPlaceAction) -> np.ndarray:
         gripper_value = 1.0 if action.gripper == cfg.GripperCommand.OPEN else -1.0
@@ -175,6 +199,25 @@ class FetchPickAndPlaceSimulator:
             truncated=truncated,
             info=dict(info),
         )
+
+    def _render_camera(self, camera_name: str) -> str:
+        renderer = self._renderers.get(camera_name)
+        if renderer is None:
+            env = self._env.unwrapped
+            renderer = MujocoRenderer(
+                env.model,
+                env.data,
+                width=FETCH.render_width,
+                height=FETCH.render_height,
+                camera_name=camera_name,
+            )
+            self._renderers[camera_name] = renderer
+
+        frame = renderer.render("rgb_array")
+        image = Image.fromarray(frame)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     def _get_gripper_quaternion(self) -> list[float]:
         env = self._env.unwrapped

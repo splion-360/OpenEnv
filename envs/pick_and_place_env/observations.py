@@ -51,11 +51,16 @@ def build_observation(
     reward: float,
     done: bool,
     echoed_message: str = "",
+    rgb_overhead: str | None = None,
+    rgb_wrist: str | None = None,
 ) -> PickAndPlaceObservation:
+    include_images = state.obs_mode != cfg.ObsMode.STATE
+    include_text = state.obs_mode != cfg.ObsMode.VISION
+
     return PickAndPlaceObservation(
-        rgb_overhead=None,
-        rgb_wrist=None,
-        scene_text=build_scene_text(state),
+        rgb_overhead=rgb_overhead if include_images else None,
+        rgb_wrist=rgb_wrist if include_images else None,
+        scene_text=build_scene_text(state) if include_text else "",
         instruction=cfg.TASK.instruction,
         phase=state.phase,
         obs_mode=state.obs_mode,
