@@ -54,7 +54,18 @@ def _extract_images(
     )
 
 
-def _format_summary(response: Dict[str, Any]) -> str:
+def _format_action(action: Any) -> str:
+    """Format a nominal or executed action for compact display."""
+    if action is None:
+        return "`None`"
+
+    return (
+        f"`dx={action.dx:.3f}, dy={action.dy:.3f}, dz={action.dz:.3f}, "
+        f"gripper={action.gripper}`"
+    )
+
+
+def _format_summary(response: Dict[str, Any], state: Any | None = None) -> str:
     """Build a compact markdown summary for the latest observation."""
     observation = response.get("observation", {})
     if not isinstance(observation, dict):
@@ -68,6 +79,8 @@ def _format_summary(response: Dict[str, Any]) -> str:
         lines.append(f"**Phase:** `{phase}`")
     if obs_mode:
         lines.append(f"**Observation mode:** `{obs_mode}`")
+    if "steps_remaining" in observation:
+        lines.append(f"**Steps remaining:** `{observation['steps_remaining']}`")
 
     scene_text = observation.get("scene_text")
     if scene_text:
@@ -82,6 +95,14 @@ def _format_summary(response: Dict[str, Any]) -> str:
         lines.append(f"**Reward:** `{reward}`")
     if done is not None:
         lines.append(f"**Done:** `{done}`")
+
+    if state is not None:
+        lines.append("")
+        lines.append(f"**CBF intervened:** `{state.cbf_intervened}`")
+        lines.append(f"**CBF scale:** `{state.cbf_scale:.3f}`")
+        lines.append(f"**CBF residual:** `{state.cbf_residual:.6f}`")
+        lines.append(f"**Proposed action:** {_format_action(state.proposed_action)}")
+        lines.append(f"**Executed action:** {_format_action(state.last_action)}")
 
     return "\n".join(lines)
 
@@ -112,7 +133,7 @@ def build_pick_and_place_gradio_app(
             await web_manager._send_state_update()
             overhead_image, wrist_image = _extract_images(response)
             return (
-                _format_summary(response),
+                _format_summary(response, state),
                 overhead_image,
                 wrist_image,
                 json.dumps(response, indent=2),
@@ -135,9 +156,10 @@ def build_pick_and_place_gradio_app(
 
         try:
             response = await web_manager.step_environment(action_data)
+            state = web_manager.env.state
             overhead_image, wrist_image = _extract_images(response)
             return (
-                _format_summary(response),
+                _format_summary(response, state),
                 overhead_image,
                 wrist_image,
                 json.dumps(response, indent=2),
