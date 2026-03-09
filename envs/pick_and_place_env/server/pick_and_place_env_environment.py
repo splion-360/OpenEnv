@@ -21,37 +21,43 @@ try:
     from openenv.core.env_server.interfaces import Environment
 
     from .. import config as cfg
+    from ..cbf import compute_safety_margins
     from ..models import (
         PickAndPlaceAction,
         PickAndPlaceObservation,
         PickAndPlaceState,
         Proprioception,
-        RewardBreakdown,
-        SafetyMargins,
     )
+    from ..observations import build_observation, detect_phase
+    from ..rewards import compute_reward_breakdown
 except ImportError:
     from openenv.core.env_server.interfaces import Environment
 
     try:
         import config as cfg  # type: ignore
+        from cbf import compute_safety_margins  # type: ignore
         from models import (  # type: ignore
             PickAndPlaceAction,
             PickAndPlaceObservation,
             PickAndPlaceState,
             Proprioception,
-            RewardBreakdown,
-            SafetyMargins,
         )
+        from observations import build_observation, detect_phase  # type: ignore
+        from rewards import compute_reward_breakdown  # type: ignore
     except ImportError:
         from pick_and_place_env import config as cfg  # type: ignore
+        from pick_and_place_env.cbf import compute_safety_margins  # type: ignore
         from pick_and_place_env.models import (  # type: ignore
             PickAndPlaceAction,
             PickAndPlaceObservation,
             PickAndPlaceState,
             Proprioception,
-            RewardBreakdown,
-            SafetyMargins,
         )
+        from pick_and_place_env.observations import (  # type: ignore
+            build_observation,
+            detect_phase,
+        )
+        from pick_and_place_env.rewards import compute_reward_breakdown  # type: ignore
 
 
 class PickAndPlaceEnvironment(Environment):
@@ -72,7 +78,6 @@ class PickAndPlaceEnvironment(Environment):
         self._max_steps = max_steps
         self._table_height = cfg.GEOMETRY.table_height
         self._grasp_distance = cfg.GEOMETRY.grasp_distance
-        self._lift_threshold = cfg.GEOMETRY.lift_threshold
         self._goal_radius = cfg.GEOMETRY.goal_radius
         self._workspace_low = list(cfg.GEOMETRY.workspace_low)
         self._workspace_high = list(cfg.GEOMETRY.workspace_high)
@@ -96,7 +101,7 @@ class PickAndPlaceEnvironment(Environment):
             gripper_width=cfg.TASK.gripper_open_width,
             joint_angles=[],
         )
-        safety = self._compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
+        safety = compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
 
         return PickAndPlaceState(
             episode_id=episode_id or str(uuid4()),
@@ -111,7 +116,7 @@ class PickAndPlaceEnvironment(Environment):
             cube_height=0.0,
             gripper_contact=False,
             proprioception=proprioception,
-            reward_breakdown=RewardBreakdown(),
+            reward_breakdown=compute_reward_breakdown(success=False),
             safety_margins=safety,
             last_action=None,
             success=False,
@@ -127,78 +132,6 @@ class PickAndPlaceEnvironment(Environment):
                 min(max(value, self._workspace_low[index]), self._workspace_high[index])
             )
         return clipped
-
-    def _compute_safety_margins(
-        self,
-        delta: list[float],
-        position: list[float],
-    ) -> SafetyMargins:
-        workspace_margin = min(
-            position[0] - self._workspace_low[0],
-            self._workspace_high[0] - position[0],
-            position[1] - self._workspace_low[1],
-            self._workspace_high[1] - position[1],
-            position[2] - self._workspace_low[2],
-            self._workspace_high[2] - position[2],
-        )
-        velocity_margin = cfg.TASK.max_action_delta_meters - self._distance(
-            delta, [0.0, 0.0, 0.0]
-        )
-        joint_limit_margin = 1.0
-
-        return SafetyMargins(
-            workspace=workspace_margin,
-            velocity=velocity_margin,
-            joint_limit=joint_limit_margin,
-            minimum=min(workspace_margin, velocity_margin, joint_limit_margin),
-        )
-
-    def _detect_phase(self, cube_to_goal: float) -> cfg.Phase:
-        if self._state.success:
-            return cfg.Phase.PLACING
-        if not self._state.gripper_contact:
-            return cfg.Phase.REACHING
-        if self._state.cube_height < self._lift_threshold:
-            return cfg.Phase.GRASPING
-        if cube_to_goal < self._goal_radius * 1.5:
-            return cfg.Phase.PLACING
-        return cfg.Phase.LIFTING
-
-    def _build_scene_text(self) -> str:
-        return (
-            f"Phase: {self._state.phase}. "
-            f"Gripper at ({self._state.ee_pos[0]:.2f}, {self._state.ee_pos[1]:.2f}, {self._state.ee_pos[2]:.2f}). "
-            f"Cube at ({self._state.cube_pos[0]:.2f}, {self._state.cube_pos[1]:.2f}, {self._state.cube_pos[2]:.2f}). "
-            f"Cube height: {self._state.cube_height:.2f}m. "
-            f"Goal: tray at ({self._state.goal_pos[0]:.2f}, {self._state.goal_pos[1]:.2f}, {self._state.goal_pos[2]:.2f}). "
-            f"Step {self._state.step_count}/{self._state.max_steps}."
-        )
-
-    def _build_observation(
-        self,
-        reward: float,
-        done: bool,
-        echoed_message: str = "",
-    ) -> PickAndPlaceObservation:
-        return PickAndPlaceObservation(
-            rgb_overhead=None,
-            rgb_wrist=None,
-            scene_text=self._build_scene_text(),
-            instruction=cfg.TASK.instruction,
-            phase=self._state.phase,
-            obs_mode=self._state.obs_mode,
-            proprioception=self._state.proprioception,
-            reward_breakdown=self._state.reward_breakdown,
-            safety_margins=self._state.safety_margins,
-            echoed_message=echoed_message,
-            message_length=len(echoed_message),
-            done=done,
-            reward=reward,
-            metadata={
-                "step": self._state.step_count,
-                "success": self._state.success,
-            },
-        )
 
     def reset(
         self,
@@ -242,7 +175,7 @@ class PickAndPlaceEnvironment(Environment):
             goal_pos=goal_pos,
         )
 
-        return self._build_observation(reward=0.0, done=False)
+        return build_observation(self._state, reward=0.0, done=False)
 
     def step(
         self,
@@ -320,15 +253,16 @@ class PickAndPlaceEnvironment(Environment):
             ),
             joint_angles=[],
         )
-        self._state.safety_margins = self._compute_safety_margins(delta, next_ee)
-        reward = 1.0 if success else 0.0
-        self._state.reward_breakdown = RewardBreakdown(success=reward, total=reward)
-        self._state.phase = self._detect_phase(cube_to_goal)
+        self._state.safety_margins = compute_safety_margins(delta, next_ee)
+        self._state.reward_breakdown = compute_reward_breakdown(success=success)
+        reward = self._state.reward_breakdown.total
+        self._state.phase = detect_phase(self._state, cube_to_goal)
 
         done = self._state.success or self._state.step_count >= self._state.max_steps
         echoed_message = action.message or ""
 
-        return self._build_observation(
+        return build_observation(
+            self._state,
             reward=reward,
             done=done,
             echoed_message=echoed_message,
