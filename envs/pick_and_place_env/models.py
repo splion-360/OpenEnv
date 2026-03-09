@@ -234,9 +234,27 @@ class PickAndPlaceState(State):
         default_factory=SafetyMargins,
         description="Latest safety margins from the CBF module",
     )
+    proposed_action: Optional[PickAndPlaceAction] = Field(
+        default=None,
+        description="Most recent nominal action proposed before CBF filtering",
+    )
     last_action: Optional[PickAndPlaceAction] = Field(
         default=None,
-        description="Most recent action applied to the environment",
+        description="Most recent action executed in the environment",
+    )
+    cbf_intervened: bool = Field(
+        default=False,
+        description="Whether the CBF filter modified the proposed action",
+    )
+    cbf_scale: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Scale factor applied to the proposed Cartesian action",
+    )
+    cbf_residual: float = Field(
+        default=0.0,
+        description="Discrete-time CBF residual for the executed action",
     )
     success: bool = Field(
         default=False,

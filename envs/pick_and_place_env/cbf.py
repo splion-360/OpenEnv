@@ -8,14 +8,17 @@ import math
 
 try:
     from . import config as cfg
-    from .models import SafetyMargins
+    from .models import PickAndPlaceAction, SafetyMargins
 except ImportError:
     try:
         import config as cfg  # type: ignore
-        from models import SafetyMargins  # type: ignore
+        from models import PickAndPlaceAction, SafetyMargins  # type: ignore
     except ImportError:
         from pick_and_place_env import config as cfg  # type: ignore
-        from pick_and_place_env.models import SafetyMargins  # type: ignore
+        from pick_and_place_env.models import (  # type: ignore
+            PickAndPlaceAction,
+            SafetyMargins,
+        )
 
 
 def compute_safety_margins(
@@ -39,4 +42,26 @@ def compute_safety_margins(
         velocity=velocity_margin,
         joint_limit=joint_limit_margin,
         minimum=min(workspace_margin, velocity_margin, joint_limit_margin),
+    )
+
+
+def scale_action(action: PickAndPlaceAction, scale: float) -> PickAndPlaceAction:
+    return PickAndPlaceAction(
+        dx=action.dx * scale,
+        dy=action.dy * scale,
+        dz=action.dz * scale,
+        gripper=action.gripper,
+        message=action.message,
+    )
+
+
+def compute_cbf_residual(
+    current_margins: SafetyMargins,
+    next_margins: SafetyMargins,
+) -> float:
+    gamma = cfg.CBF.gamma
+    return min(
+        next_margins.workspace - ((1.0 - gamma) * current_margins.workspace),
+        next_margins.velocity - ((1.0 - gamma) * current_margins.velocity),
+        next_margins.joint_limit - ((1.0 - gamma) * current_margins.joint_limit),
     )

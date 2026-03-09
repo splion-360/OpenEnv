@@ -56,7 +56,14 @@ class RewardConfig:
     cbf_weight: float = 0.8
 
 
+@dataclass(frozen=True)
+class CBFConfig:
+    gamma: float = 0.2
+    binary_search_iterations: int = 8
+
+
 TASK = TaskConfig()
 PHASE = PhaseConfig()
 SAFETY = SafetyConfig()
 REWARD = RewardConfig()
+CBF = CBFConfig()

@@ -82,6 +82,13 @@ class SimulatorSnapshot:
     info: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SimulatorState:
+    mj_state: np.ndarray
+    goal: np.ndarray
+    elapsed_steps: int | None
+
+
 class FetchPickAndPlaceSimulator:
     """
     Wrapper for the headless pick and place environment in MuJoCo
@@ -93,6 +100,12 @@ class FetchPickAndPlaceSimulator:
             max_episode_steps=max_episode_steps,
         )
         self._renderers: dict[str, MujocoRenderer] = {}
+        self._state_spec = (
+            mujoco.mjtState.mjSTATE_FULLPHYSICS
+            | mujoco.mjtState.mjSTATE_MOCAP_POS
+            | mujoco.mjtState.mjSTATE_MOCAP_QUAT
+            | mujoco.mjtState.mjSTATE_CTRL
+        )
 
     def reset(self, seed: int | None = None) -> SimulatorSnapshot:
         observation, info = self._env.reset(seed=seed)
@@ -115,6 +128,13 @@ class FetchPickAndPlaceSimulator:
             truncated=truncated,
             info=info,
         )
+
+    def peek_step(self, action: PickAndPlaceAction) -> SimulatorSnapshot:
+        saved_state = self._capture_state()
+        try:
+            return self.step(action)
+        finally:
+            self._restore_state(saved_state)
 
     def close(self) -> None:
         for renderer in self._renderers.values():
@@ -157,6 +177,27 @@ class FetchPickAndPlaceSimulator:
             ],
             dtype=np.float32,
         )
+
+    def _capture_state(self) -> SimulatorState:
+        env = self._env.unwrapped
+        mj_state = np.empty(
+            mujoco.mj_stateSize(env.model, self._state_spec),
+            dtype=np.float64,
+        )
+        mujoco.mj_getState(env.model, env.data, mj_state, self._state_spec)
+        return SimulatorState(
+            mj_state=mj_state,
+            goal=np.array(env.goal, copy=True),
+            elapsed_steps=getattr(self._env, "_elapsed_steps", None),
+        )
+
+    def _restore_state(self, saved_state: SimulatorState) -> None:
+        env = self._env.unwrapped
+        mujoco.mj_setState(env.model, env.data, saved_state.mj_state, self._state_spec)
+        mujoco.mj_forward(env.model, env.data)
+        env.goal = np.array(saved_state.goal, copy=True)
+        if hasattr(self._env, "_elapsed_steps"):
+            self._env._elapsed_steps = saved_state.elapsed_steps
 
     def _snapshot(
         self,

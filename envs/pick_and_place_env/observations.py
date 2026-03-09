@@ -75,5 +75,14 @@ def build_observation(
             "step": state.step_count,
             "steps_remaining": max(0, state.max_steps - state.step_count),
             "success": state.success,
+            "cbf_intervened": state.cbf_intervened,
+            "cbf_scale": state.cbf_scale,
+            "cbf_residual": state.cbf_residual,
+            "proposed_action": (
+                state.proposed_action.model_dump() if state.proposed_action else None
+            ),
+            "executed_action": (
+                state.last_action.model_dump() if state.last_action else None
+            ),
         },
     )
