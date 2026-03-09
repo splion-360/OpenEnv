@@ -15,9 +15,17 @@ FROM ${BASE_IMAGE} AS builder
 
 WORKDIR /app
 
-# Ensure git is available (required for installing dependencies from VCS)
+# Install build dependencies needed for MuJoCo and headless rendering.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends \
+    git \
+    libgl1 \
+    libglx-mesa0 \
+    libglew-dev \
+    libosmesa6-dev \
+    libgl1-mesa-dev \
+    libglfw3 \
+    patchelf && \
     rm -rf /var/lib/apt/lists/*
 
 # Build argument to control whether we're building standalone or in-repo
@@ -59,6 +67,16 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
+# Install runtime libraries required by MuJoCo headless rendering.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglx-mesa0 \
+    libglew-dev \
+    libosmesa6-dev \
+    libglfw3 && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy the virtual environment from builder
 COPY --from=builder /app/env/.venv /app/.venv
 
@@ -70,6 +88,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Set PYTHONPATH so imports work correctly
 ENV PYTHONPATH="/app/env:$PYTHONPATH"
+ENV MUJOCO_GL="osmesa"
+ENV ENABLE_WEB_INTERFACE="true"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
