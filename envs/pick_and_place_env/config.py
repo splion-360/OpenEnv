@@ -31,9 +31,26 @@ class Phase(StrEnum):
 class TaskConfig:
     instruction: str = "Pick up the cube and place it in the tray."
     max_steps: int = 100
-    max_action_delta_meters: float = 0.05
     gripper_open_width: float = 0.08
     gripper_closed_width: float = 0.0
+
+
+@dataclass(frozen=True)
+class SimulatorConfig:
+    env_id: str = "FetchPickAndPlace-v4"
+    control_min: float = -1.0
+    control_max: float = 1.0
+    position_action_scale_meters: float = 0.05
+    grip_site_name: str = "robot0:grip"
+    arm_joint_names: tuple[str, ...] = (
+        "robot0:shoulder_pan_joint",
+        "robot0:shoulder_lift_joint",
+        "robot0:upperarm_roll_joint",
+        "robot0:elbow_flex_joint",
+        "robot0:forearm_roll_joint",
+        "robot0:wrist_flex_joint",
+        "robot0:wrist_roll_joint",
+    )
 
 
 @dataclass(frozen=True)
@@ -59,5 +76,6 @@ class ResetConfig:
 
 
 TASK = TaskConfig()
+SIMULATOR = SimulatorConfig()
 GEOMETRY = GeometryConfig()
 RESET = ResetConfig()

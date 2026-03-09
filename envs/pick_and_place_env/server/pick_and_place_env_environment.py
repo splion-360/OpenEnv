@@ -13,7 +13,6 @@ until the MuJoCo integration is added.
 """
 
 import math
-import random
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -30,6 +29,7 @@ try:
     )
     from ..observations import build_observation, detect_phase
     from ..rewards import compute_reward_breakdown
+    from ..simulator import FetchPickAndPlaceSimulator, SimulatorSnapshot
 except ImportError:
     from openenv.core.env_server.interfaces import Environment
 
@@ -44,6 +44,10 @@ except ImportError:
         )
         from observations import build_observation, detect_phase  # type: ignore
         from rewards import compute_reward_breakdown  # type: ignore
+        from simulator import (  # type: ignore
+            FetchPickAndPlaceSimulator,
+            SimulatorSnapshot,
+        )
     except ImportError:
         from pick_and_place_env import config as cfg  # type: ignore
         from pick_and_place_env.cbf import compute_safety_margins  # type: ignore
@@ -58,6 +62,10 @@ except ImportError:
             detect_phase,
         )
         from pick_and_place_env.rewards import compute_reward_breakdown  # type: ignore
+        from pick_and_place_env.simulator import (  # type: ignore
+            FetchPickAndPlaceSimulator,
+            SimulatorSnapshot,
+        )
 
 
 class PickAndPlaceEnvironment(Environment):
@@ -74,64 +82,68 @@ class PickAndPlaceEnvironment(Environment):
         Args:
             max_steps: Maximum number of steps per episode
         """
-        self._rng = random.Random()
         self._max_steps = max_steps
-        self._table_height = cfg.GEOMETRY.table_height
-        self._grasp_distance = cfg.GEOMETRY.grasp_distance
-        self._goal_radius = cfg.GEOMETRY.goal_radius
-        self._workspace_low = list(cfg.GEOMETRY.workspace_low)
-        self._workspace_high = list(cfg.GEOMETRY.workspace_high)
-        self._state = self._make_state()
+        self._simulator = FetchPickAndPlaceSimulator(max_episode_steps=max_steps)
+        self._state = self._make_state(snapshot=None)
 
     def _make_state(
         self,
+        snapshot: Optional[SimulatorSnapshot],
         episode_id: Optional[str] = None,
         obs_mode: cfg.ObsMode = cfg.ObsMode.MULTIMODAL,
-        ee_pos: Optional[list[float]] = None,
-        cube_pos: Optional[list[float]] = None,
-        goal_pos: Optional[list[float]] = None,
     ) -> PickAndPlaceState:
-        ee_pos = ee_pos or list(cfg.GEOMETRY.ee_start_pos)
-        cube_pos = cube_pos or list(cfg.GEOMETRY.cube_start_pos)
-        goal_pos = goal_pos or list(cfg.GEOMETRY.goal_pos)
+        if snapshot is None:
+            ee_pos = list(cfg.GEOMETRY.ee_start_pos)
+            ee_quat = list(cfg.GEOMETRY.ee_quat)
+            cube_pos = list(cfg.GEOMETRY.cube_start_pos)
+            goal_pos = list(cfg.GEOMETRY.goal_pos)
+            cube_height = 0.0
+            gripper_contact = False
+            success = False
+            proprioception = Proprioception(
+                ee_pos=ee_pos,
+                ee_quat=ee_quat,
+                gripper_width=cfg.TASK.gripper_open_width,
+                joint_angles=[],
+            )
+            reward_breakdown = compute_reward_breakdown(success=False)
+            safety = compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
+        else:
+            ee_pos = list(snapshot.ee_pos)
+            ee_quat = list(snapshot.ee_quat)
+            cube_pos = list(snapshot.cube_pos)
+            goal_pos = list(snapshot.goal_pos)
+            cube_height = snapshot.cube_height
+            gripper_contact = snapshot.gripper_contact
+            success = bool(snapshot.info.get("is_success", False))
+            proprioception = snapshot.proprioception
+            reward_breakdown = compute_reward_breakdown(success=success)
+            safety = compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
 
-        proprioception = Proprioception(
-            ee_pos=list(ee_pos),
-            ee_quat=list(cfg.GEOMETRY.ee_quat),
-            gripper_width=cfg.TASK.gripper_open_width,
-            joint_angles=[],
-        )
-        safety = compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
-
-        return PickAndPlaceState(
+        cube_to_goal = self._distance(cube_pos, goal_pos)
+        state = PickAndPlaceState(
             episode_id=episode_id or str(uuid4()),
             step_count=0,
             obs_mode=obs_mode,
             phase=cfg.Phase.REACHING,
             max_steps=self._max_steps,
             ee_pos=list(ee_pos),
-            ee_quat=list(cfg.GEOMETRY.ee_quat),
+            ee_quat=list(ee_quat),
             cube_pos=list(cube_pos),
             goal_pos=list(goal_pos),
-            cube_height=0.0,
-            gripper_contact=False,
+            cube_height=cube_height,
+            gripper_contact=gripper_contact,
             proprioception=proprioception,
-            reward_breakdown=compute_reward_breakdown(success=False),
+            reward_breakdown=reward_breakdown,
             safety_margins=safety,
             last_action=None,
-            success=False,
+            success=success,
         )
+        state.phase = detect_phase(state, cube_to_goal)
+        return state
 
     def _distance(self, left: list[float], right: list[float]) -> float:
         return math.dist(left, right)
-
-    def _clip_position(self, position: list[float]) -> list[float]:
-        clipped = []
-        for index, value in enumerate(position):
-            clipped.append(
-                min(max(value, self._workspace_low[index]), self._workspace_high[index])
-            )
-        return clipped
 
     def reset(
         self,
@@ -152,27 +164,11 @@ class PickAndPlaceEnvironment(Environment):
         Returns:
             PickAndPlaceObservation with the initial scene state
         """
-        if seed is not None:
-            self._rng.seed(seed)
-
-        cube_pos = [
-            cfg.GEOMETRY.cube_start_pos[0]
-            + self._rng.uniform(-cfg.RESET.cube_x_jitter, cfg.RESET.cube_x_jitter),
-            self._rng.uniform(-cfg.RESET.cube_y_jitter, cfg.RESET.cube_y_jitter),
-            self._table_height,
-        ]
-        goal_pos = [
-            cfg.GEOMETRY.goal_pos[0]
-            + self._rng.uniform(-cfg.RESET.goal_x_jitter, cfg.RESET.goal_x_jitter),
-            self._rng.uniform(-cfg.RESET.goal_y_jitter, cfg.RESET.goal_y_jitter),
-            self._table_height,
-        ]
-
+        snapshot = self._simulator.reset(seed=seed)
         self._state = self._make_state(
+            snapshot=snapshot,
             episode_id=episode_id,
             obs_mode=obs_mode,
-            cube_pos=cube_pos,
-            goal_pos=goal_pos,
         )
 
         return build_observation(self._state, reward=0.0, done=False)
@@ -197,68 +193,32 @@ class PickAndPlaceEnvironment(Environment):
         del timeout_s, kwargs
 
         previous_ee = list(self._state.ee_pos)
-        next_ee = self._clip_position(
-            [
-                previous_ee[0] + action.dx,
-                previous_ee[1] + action.dy,
-                previous_ee[2] + action.dz,
-            ]
-        )
-        delta = [
-            next_ee[0] - previous_ee[0],
-            next_ee[1] - previous_ee[1],
-            next_ee[2] - previous_ee[2],
-        ]
-
-        cube_pos = list(self._state.cube_pos)
-        carried = self._state.gripper_contact
-        close_enough_to_grasp = (
-            self._distance(next_ee, cube_pos) <= self._grasp_distance
-        )
-
-        if action.gripper == cfg.GripperCommand.CLOSE and close_enough_to_grasp:
-            carried = True
-
-        if carried and action.gripper == cfg.GripperCommand.CLOSE:
-            cube_pos = [
-                next_ee[0],
-                next_ee[1],
-                max(self._table_height, next_ee[2] - 0.01),
-            ]
-        elif carried and action.gripper == cfg.GripperCommand.OPEN:
-            carried = False
-            cube_pos[2] = self._table_height
-
-        cube_height = max(0.0, cube_pos[2] - self._table_height)
-        cube_to_goal = self._distance(cube_pos, self._state.goal_pos)
-        success = (
-            action.gripper == cfg.GripperCommand.OPEN
-            and cube_to_goal <= self._goal_radius
-        )
-
+        snapshot = self._simulator.step(action)
+        cube_to_goal = self._distance(snapshot.cube_pos, snapshot.goal_pos)
+        success = bool(snapshot.info.get("is_success", False))
         self._state.step_count += 1
-        self._state.ee_pos = next_ee
-        self._state.cube_pos = cube_pos
-        self._state.cube_height = cube_height
-        self._state.gripper_contact = carried
+        self._state.ee_pos = list(snapshot.ee_pos)
+        self._state.ee_quat = list(snapshot.ee_quat)
+        self._state.cube_pos = list(snapshot.cube_pos)
+        self._state.goal_pos = list(snapshot.goal_pos)
+        self._state.cube_height = snapshot.cube_height
+        self._state.gripper_contact = snapshot.gripper_contact
         self._state.success = success
         self._state.last_action = action
-        self._state.proprioception = Proprioception(
-            ee_pos=list(next_ee),
-            ee_quat=list(self._state.ee_quat),
-            gripper_width=(
-                cfg.TASK.gripper_open_width
-                if action.gripper == cfg.GripperCommand.OPEN
-                else cfg.TASK.gripper_closed_width
-            ),
-            joint_angles=[],
+        self._state.proprioception = snapshot.proprioception
+        self._state.safety_margins = compute_safety_margins(
+            [
+                snapshot.ee_pos[0] - previous_ee[0],
+                snapshot.ee_pos[1] - previous_ee[1],
+                snapshot.ee_pos[2] - previous_ee[2],
+            ],
+            list(snapshot.ee_pos),
         )
-        self._state.safety_margins = compute_safety_margins(delta, next_ee)
         self._state.reward_breakdown = compute_reward_breakdown(success=success)
         reward = self._state.reward_breakdown.total
         self._state.phase = detect_phase(self._state, cube_to_goal)
 
-        done = self._state.success or self._state.step_count >= self._state.max_steps
+        done = self._state.success or snapshot.terminated or snapshot.truncated
         echoed_message = action.message or ""
 
         return build_observation(
@@ -267,6 +227,12 @@ class PickAndPlaceEnvironment(Environment):
             done=done,
             echoed_message=echoed_message,
         )
+
+    def __del__(self) -> None:
+        try:
+            self._simulator.close()
+        except Exception:
+            pass
 
     @property
     def state(self) -> PickAndPlaceState:

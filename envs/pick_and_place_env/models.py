@@ -16,11 +16,14 @@ from __future__ import annotations
 
 from typing import Annotated, Optional
 
-from openenv.core.env_server.types import Action, Observation, State
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import config as cfg
+from openenv.core.env_server.types import Action, Observation, State
 
+try:
+    from . import config as cfg
+except ImportError:
+    import config as cfg  # type: ignore
 
 Vector3 = Annotated[list[float], Field(min_length=3, max_length=3)]
 Quaternion = Annotated[list[float], Field(min_length=4, max_length=4)]
@@ -98,21 +101,21 @@ class PickAndPlaceAction(Action):
 
     dx: float = Field(
         default=0.0,
-        ge=-cfg.TASK.max_action_delta_meters,
-        le=cfg.TASK.max_action_delta_meters,
-        description="Delta movement along X in meters",
+        ge=cfg.SIMULATOR.control_min,
+        le=cfg.SIMULATOR.control_max,
+        description="Normalized X control in [-1, 1] for the Fetch action space",
     )
     dy: float = Field(
         default=0.0,
-        ge=-cfg.TASK.max_action_delta_meters,
-        le=cfg.TASK.max_action_delta_meters,
-        description="Delta movement along Y in meters",
+        ge=cfg.SIMULATOR.control_min,
+        le=cfg.SIMULATOR.control_max,
+        description="Normalized Y control in [-1, 1] for the Fetch action space",
     )
     dz: float = Field(
         default=0.0,
-        ge=-cfg.TASK.max_action_delta_meters,
-        le=cfg.TASK.max_action_delta_meters,
-        description="Delta movement along Z in meters",
+        ge=cfg.SIMULATOR.control_min,
+        le=cfg.SIMULATOR.control_max,
+        description="Normalized Z control in [-1, 1] for the Fetch action space",
     )
     gripper: cfg.GripperCommand = Field(
         default=cfg.GripperCommand.OPEN,

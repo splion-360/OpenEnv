@@ -30,7 +30,7 @@ def compute_safety_margins(
         position[2] - cfg.GEOMETRY.workspace_low[2],
         cfg.GEOMETRY.workspace_high[2] - position[2],
     )
-    velocity_margin = cfg.TASK.max_action_delta_meters - math.dist(
+    velocity_margin = cfg.SIMULATOR.position_action_scale_meters - math.dist(
         delta, [0.0, 0.0, 0.0]
     )
     joint_limit_margin = 1.0
