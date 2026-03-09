@@ -19,14 +19,18 @@ except ImportError:
         )
 
 
-def detect_phase(state: PickAndPlaceState, cube_to_goal: float) -> cfg.Phase:
+def detect_phase(
+    state: PickAndPlaceState,
+    cube_to_goal: float,
+    place_radius: float,
+) -> cfg.Phase:
     if state.success:
         return cfg.Phase.PLACING
     if not state.gripper_contact:
         return cfg.Phase.REACHING
-    if state.cube_height < cfg.GEOMETRY.lift_threshold:
+    if state.cube_height < cfg.PHASE.lift_threshold:
         return cfg.Phase.GRASPING
-    if cube_to_goal < cfg.GEOMETRY.goal_radius * 1.5:
+    if cube_to_goal < place_radius * 1.5:
         return cfg.Phase.PLACING
     return cfg.Phase.LIFTING
 

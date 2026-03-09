@@ -21,18 +21,17 @@ except ImportError:
 def compute_safety_margins(
     delta: list[float],
     position: list[float],
+    max_position_delta_meters: float,
 ) -> SafetyMargins:
     workspace_margin = min(
-        position[0] - cfg.GEOMETRY.workspace_low[0],
-        cfg.GEOMETRY.workspace_high[0] - position[0],
-        position[1] - cfg.GEOMETRY.workspace_low[1],
-        cfg.GEOMETRY.workspace_high[1] - position[1],
-        position[2] - cfg.GEOMETRY.workspace_low[2],
-        cfg.GEOMETRY.workspace_high[2] - position[2],
+        position[0] - cfg.SAFETY.workspace_low[0],
+        cfg.SAFETY.workspace_high[0] - position[0],
+        position[1] - cfg.SAFETY.workspace_low[1],
+        cfg.SAFETY.workspace_high[1] - position[1],
+        position[2] - cfg.SAFETY.workspace_low[2],
+        cfg.SAFETY.workspace_high[2] - position[2],
     )
-    velocity_margin = cfg.SIMULATOR.position_action_scale_meters - math.dist(
-        delta, [0.0, 0.0, 0.0]
-    )
+    velocity_margin = max_position_delta_meters - math.dist(delta, [0.0, 0.0, 0.0])
     joint_limit_margin = 1.0
 
     return SafetyMargins(

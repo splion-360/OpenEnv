@@ -36,6 +36,30 @@ except ImportError:
 
 
 @dataclass(frozen=True)
+class FetchConfig:
+    env_id: str = "FetchPickAndPlace-v4"
+    position_action_scale_meters: float = 0.05
+    grip_site_name: str = "robot0:grip"
+    object_geom_name: str = "object0"
+    finger_geom_names: tuple[str, str] = (
+        "robot0:r_gripper_finger_link",
+        "robot0:l_gripper_finger_link",
+    )
+    arm_joint_names: tuple[str, ...] = (
+        "robot0:shoulder_pan_joint",
+        "robot0:shoulder_lift_joint",
+        "robot0:upperarm_roll_joint",
+        "robot0:elbow_flex_joint",
+        "robot0:forearm_roll_joint",
+        "robot0:wrist_flex_joint",
+        "robot0:wrist_roll_joint",
+    )
+
+
+FETCH = FetchConfig()
+
+
+@dataclass(frozen=True)
 class SimulatorSnapshot:
     ee_pos: list[float]
     ee_quat: list[float]
@@ -57,7 +81,7 @@ class FetchPickAndPlaceSimulator:
 
     def __init__(self, max_episode_steps: int = cfg.TASK.max_steps):
         self._env = gym.make(
-            cfg.SIMULATOR.env_id,
+            FETCH.env_id,
             max_episode_steps=max_episode_steps,
         )
 
@@ -85,6 +109,18 @@ class FetchPickAndPlaceSimulator:
 
     def close(self) -> None:
         self._env.close()
+
+    @property
+    def distance_threshold(self) -> float:
+        return float(self._env.unwrapped.distance_threshold)
+
+    @property
+    def table_height(self) -> float:
+        return float(self._env.unwrapped.height_offset)
+
+    @property
+    def position_action_scale_meters(self) -> float:
+        return FETCH.position_action_scale_meters
 
     def _to_env_action(self, action: PickAndPlaceAction) -> np.ndarray:
         gripper_value = 1.0 if action.gripper == cfg.GripperCommand.OPEN else -1.0
@@ -115,13 +151,9 @@ class FetchPickAndPlaceSimulator:
 
         ee_quat = self._get_gripper_quaternion()
         joint_angles = self._get_arm_joint_angles()
-        cube_height = max(0.0, cube_pos[2] - cfg.GEOMETRY.table_height)
+        cube_height = max(0.0, cube_pos[2] - self.table_height)
 
-        gripper_contact = self._estimate_gripper_contact(
-            object_rel_pos=obs[6:9],
-            gripper_width=gripper_width,
-            cube_height=cube_height,
-        )
+        gripper_contact = self._has_gripper_contact()
 
         proprioception = Proprioception(
             ee_pos=ee_pos,
@@ -146,7 +178,7 @@ class FetchPickAndPlaceSimulator:
 
     def _get_gripper_quaternion(self) -> list[float]:
         env = self._env.unwrapped
-        site_id = env._model_names.site_name2id[cfg.SIMULATOR.grip_site_name]
+        site_id = env._model_names.site_name2id[FETCH.grip_site_name]
         matrix = np.asarray(env.data.site_xmat[site_id], dtype=np.float64).reshape(9)
         quaternion = np.zeros(4, dtype=np.float64)
         mujoco.mju_mat2Quat(quaternion, matrix)
@@ -160,19 +192,22 @@ class FetchPickAndPlaceSimulator:
                     env.model.jnt_qposadr[env._model_names.joint_name2id[name]]
                 ]
             )
-            for name in cfg.SIMULATOR.arm_joint_names
+            for name in FETCH.arm_joint_names
         ]
 
-    def _estimate_gripper_contact(
-        self,
-        object_rel_pos: np.ndarray,
-        gripper_width: float,
-        cube_height: float,
-    ) -> bool:
-        return bool(
-            np.linalg.norm(object_rel_pos) <= cfg.GEOMETRY.grasp_distance
-            and (
-                gripper_width <= cfg.TASK.gripper_open_width * 0.5
-                or cube_height >= cfg.GEOMETRY.lift_threshold
-            )
-        )
+    def _has_gripper_contact(self) -> bool:
+        env = self._env.unwrapped
+        geom_names = env._model_names.geom_id2name
+
+        for index in range(env.data.ncon):
+            contact = env.data.contact[index]
+            geom_1 = geom_names.get(contact.geom1)
+            geom_2 = geom_names.get(contact.geom2)
+            contact_names = {geom_1, geom_2}
+
+            if FETCH.object_geom_name not in contact_names:
+                continue
+            if any(name in contact_names for name in FETCH.finger_geom_names):
+                return True
+
+        return False

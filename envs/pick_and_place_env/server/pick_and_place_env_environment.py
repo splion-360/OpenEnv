@@ -25,7 +25,6 @@ try:
         PickAndPlaceAction,
         PickAndPlaceObservation,
         PickAndPlaceState,
-        Proprioception,
     )
     from ..observations import build_observation, detect_phase
     from ..rewards import compute_reward_breakdown
@@ -40,7 +39,6 @@ except ImportError:
             PickAndPlaceAction,
             PickAndPlaceObservation,
             PickAndPlaceState,
-            Proprioception,
         )
         from observations import build_observation, detect_phase  # type: ignore
         from rewards import compute_reward_breakdown  # type: ignore
@@ -55,7 +53,6 @@ except ImportError:
             PickAndPlaceAction,
             PickAndPlaceObservation,
             PickAndPlaceState,
-            Proprioception,
         )
         from pick_and_place_env.observations import (  # type: ignore
             build_observation,
@@ -84,41 +81,30 @@ class PickAndPlaceEnvironment(Environment):
         """
         self._max_steps = max_steps
         self._simulator = FetchPickAndPlaceSimulator(max_episode_steps=max_steps)
-        self._state = self._make_state(snapshot=None)
+        self._goal_radius = self._simulator.distance_threshold
+        self._max_position_delta_meters = self._simulator.position_action_scale_meters
+        self._state = self._make_state(snapshot=self._simulator.reset())
 
     def _make_state(
         self,
-        snapshot: Optional[SimulatorSnapshot],
+        snapshot: SimulatorSnapshot,
         episode_id: Optional[str] = None,
         obs_mode: cfg.ObsMode = cfg.ObsMode.MULTIMODAL,
     ) -> PickAndPlaceState:
-        if snapshot is None:
-            ee_pos = list(cfg.GEOMETRY.ee_start_pos)
-            ee_quat = list(cfg.GEOMETRY.ee_quat)
-            cube_pos = list(cfg.GEOMETRY.cube_start_pos)
-            goal_pos = list(cfg.GEOMETRY.goal_pos)
-            cube_height = 0.0
-            gripper_contact = False
-            success = False
-            proprioception = Proprioception(
-                ee_pos=ee_pos,
-                ee_quat=ee_quat,
-                gripper_width=cfg.TASK.gripper_open_width,
-                joint_angles=[],
-            )
-            reward_breakdown = compute_reward_breakdown(success=False)
-            safety = compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
-        else:
-            ee_pos = list(snapshot.ee_pos)
-            ee_quat = list(snapshot.ee_quat)
-            cube_pos = list(snapshot.cube_pos)
-            goal_pos = list(snapshot.goal_pos)
-            cube_height = snapshot.cube_height
-            gripper_contact = snapshot.gripper_contact
-            success = bool(snapshot.info.get("is_success", False))
-            proprioception = snapshot.proprioception
-            reward_breakdown = compute_reward_breakdown(success=success)
-            safety = compute_safety_margins([0.0, 0.0, 0.0], ee_pos)
+        ee_pos = list(snapshot.ee_pos)
+        ee_quat = list(snapshot.ee_quat)
+        cube_pos = list(snapshot.cube_pos)
+        goal_pos = list(snapshot.goal_pos)
+        cube_height = snapshot.cube_height
+        gripper_contact = snapshot.gripper_contact
+        success = bool(snapshot.info.get("is_success", False))
+        proprioception = snapshot.proprioception
+        reward_breakdown = compute_reward_breakdown(success=success)
+        safety = compute_safety_margins(
+            [0.0, 0.0, 0.0],
+            ee_pos,
+            max_position_delta_meters=self._max_position_delta_meters,
+        )
 
         cube_to_goal = self._distance(cube_pos, goal_pos)
         state = PickAndPlaceState(
@@ -139,7 +125,7 @@ class PickAndPlaceEnvironment(Environment):
             last_action=None,
             success=success,
         )
-        state.phase = detect_phase(state, cube_to_goal)
+        state.phase = detect_phase(state, cube_to_goal, self._goal_radius)
         return state
 
     def _distance(self, left: list[float], right: list[float]) -> float:
@@ -213,10 +199,15 @@ class PickAndPlaceEnvironment(Environment):
                 snapshot.ee_pos[2] - previous_ee[2],
             ],
             list(snapshot.ee_pos),
+            max_position_delta_meters=self._max_position_delta_meters,
         )
         self._state.reward_breakdown = compute_reward_breakdown(success=success)
         reward = self._state.reward_breakdown.total
-        self._state.phase = detect_phase(self._state, cube_to_goal)
+        self._state.phase = detect_phase(
+            self._state,
+            cube_to_goal,
+            self._goal_radius,
+        )
 
         done = self._state.success or snapshot.terminated or snapshot.truncated
         echoed_message = action.message or ""

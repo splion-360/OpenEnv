@@ -101,20 +101,20 @@ class PickAndPlaceAction(Action):
 
     dx: float = Field(
         default=0.0,
-        ge=cfg.SIMULATOR.control_min,
-        le=cfg.SIMULATOR.control_max,
+        ge=-1.0,
+        le=1.0,
         description="Normalized X control in [-1, 1] for the Fetch action space",
     )
     dy: float = Field(
         default=0.0,
-        ge=cfg.SIMULATOR.control_min,
-        le=cfg.SIMULATOR.control_max,
+        ge=-1.0,
+        le=1.0,
         description="Normalized Y control in [-1, 1] for the Fetch action space",
     )
     dz: float = Field(
         default=0.0,
-        ge=cfg.SIMULATOR.control_min,
-        le=cfg.SIMULATOR.control_max,
+        ge=-1.0,
+        le=1.0,
         description="Normalized Z control in [-1, 1] for the Fetch action space",
     )
     gripper: cfg.GripperCommand = Field(
