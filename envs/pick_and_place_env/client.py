@@ -16,6 +16,7 @@ from typing import Any, Dict
 from openenv.core.client_types import StepResult
 from openenv.core.env_client import EnvClient
 
+from . import config as cfg
 from .models import (
     PickAndPlaceAction,
     PickAndPlaceObservation,
@@ -111,11 +112,9 @@ class PickAndPlaceEnv(
             rgb_overhead=obs_data.get("rgb_overhead"),
             rgb_wrist=obs_data.get("rgb_wrist"),
             scene_text=obs_data.get("scene_text", ""),
-            instruction=obs_data.get(
-                "instruction", "Pick up the cube and place it in the tray."
-            ),
-            phase=obs_data.get("phase", "reaching"),
-            obs_mode=obs_data.get("obs_mode", "multimodal"),
+            instruction=obs_data.get("instruction", cfg.TASK.instruction),
+            phase=obs_data.get("phase", cfg.Phase.REACHING),
+            obs_mode=obs_data.get("obs_mode", cfg.ObsMode.MULTIMODAL),
             proprioception=self._parse_proprioception(
                 obs_data.get("proprioception", {})
             ),
@@ -151,9 +150,9 @@ class PickAndPlaceEnv(
         return PickAndPlaceState(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),
-            obs_mode=payload.get("obs_mode", "multimodal"),
-            phase=payload.get("phase", "reaching"),
-            max_steps=payload.get("max_steps", 100),
+            obs_mode=payload.get("obs_mode", cfg.ObsMode.MULTIMODAL),
+            phase=payload.get("phase", cfg.Phase.REACHING),
+            max_steps=payload.get("max_steps", cfg.TASK.max_steps),
             ee_pos=payload.get("ee_pos", [0.0, 0.0, 0.0]),
             ee_quat=payload.get("ee_quat", [1.0, 0.0, 0.0, 0.0]),
             cube_pos=payload.get("cube_pos", [0.0, 0.0, 0.0]),

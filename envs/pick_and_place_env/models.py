@@ -14,16 +14,16 @@ continues to boot until the server/client migration is completed.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 from openenv.core.env_server.types import Action, Observation, State
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import config as cfg
+
 
 Vector3 = Annotated[list[float], Field(min_length=3, max_length=3)]
 Quaternion = Annotated[list[float], Field(min_length=4, max_length=4)]
-ObsMode = Literal["vision", "state", "multimodal"]
-GripperCommand = Literal["open", "close"]
 
 
 class _StrictModel(BaseModel):
@@ -98,24 +98,24 @@ class PickAndPlaceAction(Action):
 
     dx: float = Field(
         default=0.0,
-        ge=-0.05,
-        le=0.05,
+        ge=-cfg.TASK.max_action_delta_meters,
+        le=cfg.TASK.max_action_delta_meters,
         description="Delta movement along X in meters",
     )
     dy: float = Field(
         default=0.0,
-        ge=-0.05,
-        le=0.05,
+        ge=-cfg.TASK.max_action_delta_meters,
+        le=cfg.TASK.max_action_delta_meters,
         description="Delta movement along Y in meters",
     )
     dz: float = Field(
         default=0.0,
-        ge=-0.05,
-        le=0.05,
+        ge=-cfg.TASK.max_action_delta_meters,
+        le=cfg.TASK.max_action_delta_meters,
         description="Delta movement along Z in meters",
     )
-    gripper: GripperCommand = Field(
-        default="open",
+    gripper: cfg.GripperCommand = Field(
+        default=cfg.GripperCommand.OPEN,
         description="Desired gripper command for this step",
     )
     message: Optional[str] = Field(
@@ -140,15 +140,15 @@ class PickAndPlaceObservation(Observation):
         description="Natural language description of the current scene",
     )
     instruction: str = Field(
-        default="Pick up the cube and place it in the tray.",
+        default=cfg.TASK.instruction,
         description="Task instruction shown to the policy",
     )
-    phase: str = Field(
-        default="reaching",
+    phase: cfg.Phase = Field(
+        default=cfg.Phase.REACHING,
         description="Current deterministic task phase",
     )
-    obs_mode: ObsMode = Field(
-        default="multimodal",
+    obs_mode: cfg.ObsMode = Field(
+        default=cfg.ObsMode.MULTIMODAL,
         description="Observation mode active for the current episode",
     )
     proprioception: Proprioception = Field(
@@ -177,16 +177,16 @@ class PickAndPlaceObservation(Observation):
 class PickAndPlaceState(State):
     """Environment state tracked across an episode."""
 
-    obs_mode: ObsMode = Field(
-        default="multimodal",
+    obs_mode: cfg.ObsMode = Field(
+        default=cfg.ObsMode.MULTIMODAL,
         description="Observation mode configured for the episode",
     )
-    phase: str = Field(
-        default="reaching",
+    phase: cfg.Phase = Field(
+        default=cfg.Phase.REACHING,
         description="Current task phase",
     )
     max_steps: int = Field(
-        default=100,
+        default=cfg.TASK.max_steps,
         ge=1,
         description="Maximum number of steps allowed in the episode",
     )
