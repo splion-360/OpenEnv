@@ -154,6 +154,11 @@ class PickAndPlaceObservation(Observation):
         default=cfg.ObsMode.MULTIMODAL,
         description="Observation mode active for the current episode",
     )
+    steps_remaining: int = Field(
+        default=cfg.TASK.max_steps,
+        ge=0,
+        description="Number of environment steps remaining before truncation",
+    )
     proprioception: Proprioception = Field(
         default_factory=Proprioception,
         description="Robot proprioceptive features",

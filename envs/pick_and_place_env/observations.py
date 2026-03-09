@@ -41,8 +41,7 @@ def build_scene_text(state: PickAndPlaceState) -> str:
         f"Gripper at ({state.ee_pos[0]:.2f}, {state.ee_pos[1]:.2f}, {state.ee_pos[2]:.2f}). "
         f"Cube at ({state.cube_pos[0]:.2f}, {state.cube_pos[1]:.2f}, {state.cube_pos[2]:.2f}). "
         f"Cube height: {state.cube_height:.2f}m. "
-        f"Goal: tray at ({state.goal_pos[0]:.2f}, {state.goal_pos[1]:.2f}, {state.goal_pos[2]:.2f}). "
-        f"Step {state.step_count}/{state.max_steps}."
+        f"Goal: tray at ({state.goal_pos[0]:.2f}, {state.goal_pos[1]:.2f}, {state.goal_pos[2]:.2f})."
     )
 
 
@@ -64,6 +63,7 @@ def build_observation(
         instruction=cfg.TASK.instruction,
         phase=state.phase,
         obs_mode=state.obs_mode,
+        steps_remaining=max(0, state.max_steps - state.step_count),
         proprioception=state.proprioception,
         reward_breakdown=state.reward_breakdown,
         safety_margins=state.safety_margins,
@@ -73,6 +73,7 @@ def build_observation(
         reward=reward,
         metadata={
             "step": state.step_count,
+            "steps_remaining": max(0, state.max_steps - state.step_count),
             "success": state.success,
         },
     )

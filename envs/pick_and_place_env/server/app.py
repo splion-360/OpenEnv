@@ -28,6 +28,9 @@ Usage:
     python -m server.app
 """
 
+import inspect
+import logging
+
 try:
     from openenv.core.env_server.http_server import create_app
 except Exception as e:  # pragma: no cover
@@ -38,17 +41,33 @@ except Exception as e:  # pragma: no cover
 # Import from local models.py (PYTHONPATH includes /app/env in Docker)
 from models import PickAndPlaceAction, PickAndPlaceObservation
 
+from .gradio_ui import build_pick_and_place_gradio_app
 from .pick_and_place_env_environment import PickAndPlaceEnvironment
 
+_logger = logging.getLogger(__name__)
+_sig = inspect.signature(create_app)
 
-# Create the app with web interface and README integration
-app = create_app(
-    PickAndPlaceEnvironment,
-    PickAndPlaceAction,
-    PickAndPlaceObservation,
-    env_name="pick_and_place_env",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
-)
+if "gradio_builder" in _sig.parameters:
+    app = create_app(
+        PickAndPlaceEnvironment,
+        PickAndPlaceAction,
+        PickAndPlaceObservation,
+        env_name="pick_and_place_env",
+        max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+        gradio_builder=build_pick_and_place_gradio_app,
+    )
+else:
+    _logger.warning(
+        "Installed openenv-core does not support gradio_builder; "
+        "custom visualization tab will not be available."
+    )
+    app = create_app(
+        PickAndPlaceEnvironment,
+        PickAndPlaceAction,
+        PickAndPlaceObservation,
+        env_name="pick_and_place_env",
+        max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    )
 
 
 def main(host: str = "0.0.0.0", port: int = 8000):
