@@ -106,10 +106,12 @@ class PickAndPlaceEnvironment(Environment):
         gripper_contact = snapshot.gripper_contact
         success = bool(snapshot.info.get("is_success", False))
         proprioception = snapshot.proprioception
+        joint_angles = list(proprioception.joint_angles)
         safety = compute_safety_margins(
             [0.0, 0.0, 0.0],
             ee_pos,
             max_position_delta_meters=self._max_position_delta_meters,
+            joint_limit_margin=self._simulator.compute_joint_limit_margin(joint_angles),
         )
 
         cube_to_goal = self._distance(cube_pos, goal_pos)
@@ -156,6 +158,9 @@ class PickAndPlaceEnvironment(Environment):
             ],
             list(candidate_snapshot.ee_pos),
             max_position_delta_meters=self._max_position_delta_meters,
+            joint_limit_margin=self._simulator.compute_joint_limit_margin(
+                candidate_snapshot.proprioception.joint_angles
+            ),
         )
         candidate_residual = compute_cbf_residual(
             self._state.safety_margins,

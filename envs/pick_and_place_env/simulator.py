@@ -154,6 +154,21 @@ class FetchPickAndPlaceSimulator:
     def position_action_scale_meters(self) -> float:
         return FETCH.position_action_scale_meters
 
+    def compute_joint_limit_margin(self, joint_angles: list[float]) -> float:
+        env = self._env.unwrapped
+        min_margin = float("inf")
+
+        for joint_name, joint_angle in zip(FETCH.arm_joint_names, joint_angles):
+            joint_id = env._model_names.joint_name2id[joint_name]
+            if not bool(env.model.jnt_limited[joint_id]):
+                continue
+
+            lower_limit, upper_limit = env.model.jnt_range[joint_id]
+            joint_margin = min(joint_angle - lower_limit, upper_limit - joint_angle)
+            min_margin = min(min_margin, float(joint_margin))
+
+        return min_margin
+
     def render_observation_images(
         self,
         obs_mode: cfg.ObsMode,

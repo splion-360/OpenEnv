@@ -25,6 +25,7 @@ def compute_safety_margins(
     delta: list[float],
     position: list[float],
     max_position_delta_meters: float,
+    joint_limit_margin: float,
 ) -> SafetyMargins:
     workspace_margin = min(
         position[0] - cfg.SAFETY.workspace_low[0],
@@ -35,7 +36,6 @@ def compute_safety_margins(
         cfg.SAFETY.workspace_high[2] - position[2],
     )
     velocity_margin = max_position_delta_meters - math.dist(delta, [0.0, 0.0, 0.0])
-    joint_limit_margin = 1.0
 
     return SafetyMargins(
         workspace=workspace_margin,
