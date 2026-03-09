@@ -44,6 +44,19 @@ class SafetyConfig:
     workspace_high: tuple[float, float, float] = (1.60, 1.00, 0.90)
 
 
+@dataclass(frozen=True)
+class RewardConfig:
+    format_weight: float = 1.0
+    bounds_weight: float = 0.5
+    reach_weight: float = 1.0
+    grasp_weight: float = 2.0
+    lift_weight: float = 1.5
+    place_weight: float = 2.0
+    success_weight: float = 10.0
+    cbf_weight: float = 0.8
+
+
 TASK = TaskConfig()
 PHASE = PhaseConfig()
 SAFETY = SafetyConfig()
+REWARD = RewardConfig()

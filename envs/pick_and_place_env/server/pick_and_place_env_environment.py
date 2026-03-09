@@ -12,7 +12,6 @@ OpenEnv interface. It tracks robot, object, and goal state with simple geometry
 until the MuJoCo integration is added.
 """
 
-import math
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -99,7 +98,6 @@ class PickAndPlaceEnvironment(Environment):
         gripper_contact = snapshot.gripper_contact
         success = bool(snapshot.info.get("is_success", False))
         proprioception = snapshot.proprioception
-        reward_breakdown = compute_reward_breakdown(success=success)
         safety = compute_safety_margins(
             [0.0, 0.0, 0.0],
             ee_pos,
@@ -120,7 +118,6 @@ class PickAndPlaceEnvironment(Environment):
             cube_height=cube_height,
             gripper_contact=gripper_contact,
             proprioception=proprioception,
-            reward_breakdown=reward_breakdown,
             safety_margins=safety,
             last_action=None,
             success=success,
@@ -129,7 +126,10 @@ class PickAndPlaceEnvironment(Environment):
         return state
 
     def _distance(self, left: list[float], right: list[float]) -> float:
-        return math.dist(left, right)
+        x_delta = left[0] - right[0]
+        y_delta = left[1] - right[1]
+        z_delta = left[2] - right[2]
+        return (x_delta * x_delta + y_delta * y_delta + z_delta * z_delta) ** 0.5
 
     def reset(
         self,
@@ -210,7 +210,13 @@ class PickAndPlaceEnvironment(Environment):
             list(snapshot.ee_pos),
             max_position_delta_meters=self._max_position_delta_meters,
         )
-        self._state.reward_breakdown = compute_reward_breakdown(success=success)
+        self._state.reward_breakdown = compute_reward_breakdown(
+            gripper_to_cube=self._distance(snapshot.ee_pos, snapshot.cube_pos),
+            cube_to_goal=cube_to_goal,
+            cube_height=snapshot.cube_height,
+            gripper_contact=snapshot.gripper_contact,
+            success=success,
+        )
         reward = self._state.reward_breakdown.total
         self._state.phase = detect_phase(
             self._state,
