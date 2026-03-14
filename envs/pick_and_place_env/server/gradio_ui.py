@@ -100,6 +100,9 @@ def _format_summary(response: Dict[str, Any], state: Any | None = None) -> str:
         lines.append(f"**CBF intervened:** `{state.cbf_intervened}`")
         lines.append(f"**CBF scale:** `{state.cbf_scale:.3f}`")
         lines.append(f"**CBF residual:** `{state.cbf_residual:.6f}`")
+        lines.append(
+            f"**Joint velocity margin:** `{state.safety_margins.joint_velocity:.6f}`"
+        )
         lines.append(f"**Goal reached once:** `{state.goal_reached_once}`")
         lines.append(f"**Proposed action:** {_format_action(state.proposed_action)}")
         lines.append(f"**Executed action:** {_format_action(state.last_action)}")

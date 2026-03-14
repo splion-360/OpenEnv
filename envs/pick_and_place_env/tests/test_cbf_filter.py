@@ -99,6 +99,25 @@ def test_compute_joint_limit_margin_matches_limited_fetch_joints() -> None:
         simulator.close()
 
 
+def test_compute_joint_velocity_margin_matches_max_joint_speed() -> None:
+    simulator = FetchPickAndPlaceSimulator()
+    try:
+        snapshot = simulator.reset(seed=0)
+        velocity_limit = simulator.joint_velocity_limit_rad_s
+        computed_margin = simulator.compute_joint_velocity_margin(
+            snapshot.proprioception.joint_velocities,
+            velocity_limit,
+        )
+        expected_margin = velocity_limit - max(
+            abs(value) for value in snapshot.proprioception.joint_velocities
+        )
+
+        assert velocity_limit > 0.0
+        assert np.isclose(computed_margin, expected_margin)
+    finally:
+        simulator.close()
+
+
 def test_task_success_requires_goal_then_return_home() -> None:
     environment = PickAndPlaceEnvironment(enable_cbf_filter=False)
     try:

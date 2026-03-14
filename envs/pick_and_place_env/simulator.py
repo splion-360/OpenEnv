@@ -109,9 +109,13 @@ class FetchPickAndPlaceSimulator:
             | mujoco.mjtState.mjSTATE_CTRL
         )
         self._validate_render_backend()
+        self._joint_velocity_limit_rad_s = 0.0
 
     def reset(self, seed: int | None = None) -> SimulatorSnapshot:
         observation, info = self._env.reset(seed=seed)
+        self._joint_velocity_limit_rad_s = (
+            self._calibrate_joint_velocity_limit() * cfg.CBF.joint_velocity_limit_scale
+        )
         return self._snapshot(
             observation=observation,
             reward=0.0,
@@ -162,6 +166,10 @@ class FetchPickAndPlaceSimulator:
         env = self._env.unwrapped
         return float(env.n_substeps) * float(env.model.opt.timestep)
 
+    @property
+    def joint_velocity_limit_rad_s(self) -> float:
+        return self._joint_velocity_limit_rad_s
+
     def compute_joint_limit_margin(self, joint_angles: list[float]) -> float:
         env = self._env.unwrapped
         min_margin = float("inf")
@@ -176,6 +184,14 @@ class FetchPickAndPlaceSimulator:
             min_margin = min(min_margin, float(joint_margin))
 
         return min_margin
+
+    def compute_joint_velocity_margin(
+        self,
+        joint_velocities: list[float],
+        joint_velocity_limit_rad_s: float,
+    ) -> float:
+        max_joint_speed = max(abs(value) for value in joint_velocities)
+        return float(joint_velocity_limit_rad_s - max_joint_speed)
 
     def render_observation_images(
         self,
@@ -235,6 +251,7 @@ class FetchPickAndPlaceSimulator:
 
         ee_quat = self._get_gripper_quaternion()
         joint_angles = self._get_arm_joint_angles()
+        joint_velocities = self._get_arm_joint_velocities()
         cube_height = max(0.0, cube_pos[2] - self.table_height)
 
         gripper_contact = self._has_gripper_contact()
@@ -245,6 +262,7 @@ class FetchPickAndPlaceSimulator:
             ee_linear_velocity=ee_linear_velocity,
             gripper_width=gripper_width,
             joint_angles=joint_angles,
+            joint_velocities=joint_velocities,
         )
 
         return SimulatorSnapshot(
@@ -311,6 +329,43 @@ class FetchPickAndPlaceSimulator:
             )
             for name in FETCH.arm_joint_names
         ]
+
+    def _get_arm_joint_velocities(self) -> list[float]:
+        env = self._env.unwrapped
+        return [
+            float(
+                env.data.qvel[
+                    env.model.jnt_dofadr[env._model_names.joint_name2id[name]]
+                ]
+            )
+            for name in FETCH.arm_joint_names
+        ]
+
+    def _calibrate_joint_velocity_limit(self) -> float:
+        probe_actions = (
+            PickAndPlaceAction(dx=1.0, dy=0.0, dz=0.0, gripper=0.0),
+            PickAndPlaceAction(dx=-1.0, dy=0.0, dz=0.0, gripper=0.0),
+            PickAndPlaceAction(dx=0.0, dy=1.0, dz=0.0, gripper=0.0),
+            PickAndPlaceAction(dx=0.0, dy=-1.0, dz=0.0, gripper=0.0),
+            PickAndPlaceAction(dx=0.0, dy=0.0, dz=1.0, gripper=0.0),
+            PickAndPlaceAction(dx=0.0, dy=0.0, dz=-1.0, gripper=0.0),
+            PickAndPlaceAction(dx=1.0, dy=1.0, dz=1.0, gripper=0.0),
+            PickAndPlaceAction(dx=1.0, dy=1.0, dz=-1.0, gripper=0.0),
+            PickAndPlaceAction(dx=1.0, dy=-1.0, dz=1.0, gripper=0.0),
+            PickAndPlaceAction(dx=1.0, dy=-1.0, dz=-1.0, gripper=0.0),
+            PickAndPlaceAction(dx=-1.0, dy=1.0, dz=1.0, gripper=0.0),
+            PickAndPlaceAction(dx=-1.0, dy=1.0, dz=-1.0, gripper=0.0),
+            PickAndPlaceAction(dx=-1.0, dy=-1.0, dz=1.0, gripper=0.0),
+            PickAndPlaceAction(dx=-1.0, dy=-1.0, dz=-1.0, gripper=0.0),
+        )
+        max_joint_speed = 0.0
+        for action in probe_actions:
+            snapshot = self.peek_step(action)
+            action_max_speed = max(
+                abs(value) for value in snapshot.proprioception.joint_velocities
+            )
+            max_joint_speed = max(max_joint_speed, action_max_speed)
+        return max(max_joint_speed, 1e-6)
 
     def _has_gripper_contact(self) -> bool:
         env = self._env.unwrapped

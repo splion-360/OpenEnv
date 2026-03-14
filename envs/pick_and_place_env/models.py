@@ -57,6 +57,10 @@ class Proprioception(_StrictModel):
         default_factory=list,
         description="Robot arm joint angles in radians",
     )
+    joint_velocities: list[float] = Field(
+        default_factory=list,
+        description="Robot arm joint velocities in radians per second-equivalent scale",
+    )
 
 
 class RewardBreakdown(_StrictModel):
@@ -93,6 +97,10 @@ class SafetyMargins(_StrictModel):
     joint_limit: float = Field(
         default=0.0,
         description="Joint-limit safety margin; negative means violation",
+    )
+    joint_velocity: float = Field(
+        default=0.0,
+        description="Joint-velocity safety margin; negative means violation",
     )
     minimum: float = Field(
         default=0.0,

@@ -45,6 +45,7 @@ class PickAndPlaceEnv(
             ee_linear_velocity=payload.get("ee_linear_velocity", [0.0, 0.0, 0.0]),
             gripper_width=payload.get("gripper_width", 0.0),
             joint_angles=payload.get("joint_angles", []),
+            joint_velocities=payload.get("joint_velocities", []),
         )
 
     @staticmethod
@@ -67,6 +68,7 @@ class PickAndPlaceEnv(
             workspace=payload.get("workspace", 0.0),
             velocity=payload.get("velocity", 0.0),
             joint_limit=payload.get("joint_limit", 0.0),
+            joint_velocity=payload.get("joint_velocity", 0.0),
             minimum=payload.get("minimum", 0.0),
         )
 

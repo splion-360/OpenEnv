@@ -27,6 +27,7 @@ def compute_safety_margins(
     step_dt: float,
     max_velocity_mps: float,
     joint_limit_margin: float,
+    joint_velocity_margin: float,
 ) -> SafetyMargins:
     workspace_margin = min(
         position[0] - cfg.SAFETY.workspace_low[0],
@@ -43,7 +44,13 @@ def compute_safety_margins(
         workspace=workspace_margin,
         velocity=velocity_margin,
         joint_limit=joint_limit_margin,
-        minimum=min(workspace_margin, velocity_margin, joint_limit_margin),
+        joint_velocity=joint_velocity_margin,
+        minimum=min(
+            workspace_margin,
+            velocity_margin,
+            joint_limit_margin,
+            joint_velocity_margin,
+        ),
     )
 
 
@@ -64,4 +71,5 @@ def compute_cbf_residual(
     return min(
         next_margins.velocity - ((1.0 - gamma) * current_margins.velocity),
         next_margins.joint_limit - ((1.0 - gamma) * current_margins.joint_limit),
+        next_margins.joint_velocity - ((1.0 - gamma) * current_margins.joint_velocity),
     )

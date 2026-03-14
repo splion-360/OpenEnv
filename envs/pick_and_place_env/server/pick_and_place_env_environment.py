@@ -122,6 +122,10 @@ class PickAndPlaceEnvironment(Environment):
             step_dt=self._simulator.step_dt,
             max_velocity_mps=self._max_velocity_mps,
             joint_limit_margin=self._simulator.compute_joint_limit_margin(joint_angles),
+            joint_velocity_margin=self._simulator.compute_joint_velocity_margin(
+                joint_velocities=proprioception.joint_velocities,
+                joint_velocity_limit_rad_s=self._simulator.joint_velocity_limit_rad_s,
+            ),
         )
 
         cube_to_goal = self._distance(cube_pos, goal_pos)
@@ -168,6 +172,10 @@ class PickAndPlaceEnvironment(Environment):
             max_velocity_mps=self._max_velocity_mps,
             joint_limit_margin=self._simulator.compute_joint_limit_margin(
                 candidate_snapshot.proprioception.joint_angles
+            ),
+            joint_velocity_margin=self._simulator.compute_joint_velocity_margin(
+                joint_velocities=candidate_snapshot.proprioception.joint_velocities,
+                joint_velocity_limit_rad_s=self._simulator.joint_velocity_limit_rad_s,
             ),
         )
         candidate_residual = compute_cbf_residual(
@@ -278,6 +286,7 @@ class PickAndPlaceEnvironment(Environment):
         del timeout_s, kwargs
 
         proposed_action = action
+
         if self._enable_cbf_filter:
             (
                 filtered_action,
@@ -286,10 +295,12 @@ class PickAndPlaceEnvironment(Environment):
                 candidate_scale,
             ) = self._filter_action_with_cbf(proposed_action)
             snapshot = self._simulator.step(filtered_action)
+
         else:
             filtered_action = proposed_action
             candidate_scale = 1.0
             snapshot = self._simulator.step(filtered_action)
+
             candidate_safety = compute_safety_margins(
                 list(snapshot.ee_pos),
                 ee_linear_velocity=list(snapshot.ee_linear_velocity),
@@ -297,6 +308,10 @@ class PickAndPlaceEnvironment(Environment):
                 max_velocity_mps=self._max_velocity_mps,
                 joint_limit_margin=self._simulator.compute_joint_limit_margin(
                     snapshot.proprioception.joint_angles
+                ),
+                joint_velocity_margin=self._simulator.compute_joint_velocity_margin(
+                    joint_velocities=snapshot.proprioception.joint_velocities,
+                    joint_velocity_limit_rad_s=self._simulator.joint_velocity_limit_rad_s,
                 ),
             )
             candidate_residual = compute_cbf_residual(

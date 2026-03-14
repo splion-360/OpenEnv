@@ -54,6 +54,7 @@ class CBFConfig:
     enable_filter: bool = False
     gamma: float = 0.2
     binary_search_iterations: int = 8
+    joint_velocity_limit_scale: float = 1.0
 
 
 TASK = TaskConfig()
