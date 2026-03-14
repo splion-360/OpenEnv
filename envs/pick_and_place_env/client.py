@@ -42,6 +42,7 @@ class PickAndPlaceEnv(
         return Proprioception(
             ee_pos=payload.get("ee_pos", [0.0, 0.0, 0.0]),
             ee_quat=payload.get("ee_quat", [1.0, 0.0, 0.0, 0.0]),
+            ee_linear_velocity=payload.get("ee_linear_velocity", [0.0, 0.0, 0.0]),
             gripper_width=payload.get("gripper_width", 0.0),
             joint_angles=payload.get("joint_angles", []),
         )

@@ -26,7 +26,7 @@ def test_simulator_peek_step_restores_state() -> None:
             dx=1.0,
             dy=0.0,
             dz=0.0,
-            gripper="open",
+            gripper=1.0,
         )
         simulator.peek_step(candidate_action)
 
@@ -52,7 +52,7 @@ def test_environment_step_filters_unsafe_nominal_action() -> None:
             dx=1.0,
             dy=0.0,
             dz=0.0,
-            gripper="open",
+            gripper=1.0,
         )
         observation = environment.step(nominal_action)
 

@@ -71,6 +71,7 @@ FETCH = FetchConfig()
 class SimulatorSnapshot:
     ee_pos: list[float]
     ee_quat: list[float]
+    ee_linear_velocity: list[float]
     cube_pos: list[float]
     goal_pos: list[float]
     cube_height: float
@@ -154,6 +155,11 @@ class FetchPickAndPlaceSimulator:
     def position_action_scale_meters(self) -> float:
         return FETCH.position_action_scale_meters
 
+    @property
+    def step_dt(self) -> float:
+        env = self._env.unwrapped
+        return float(env.n_substeps) * float(env.model.opt.timestep)
+
     def compute_joint_limit_margin(self, joint_angles: list[float]) -> float:
         env = self._env.unwrapped
         min_margin = float("inf")
@@ -182,13 +188,12 @@ class FetchPickAndPlaceSimulator:
         )
 
     def _to_env_action(self, action: PickAndPlaceAction) -> np.ndarray:
-        gripper_value = 1.0 if action.gripper == cfg.GripperCommand.OPEN else -1.0
         return np.array(
             [
                 action.dx,
                 action.dy,
                 action.dz,
-                gripper_value,
+                action.gripper,
             ],
             dtype=np.float32,
         )
@@ -225,6 +230,7 @@ class FetchPickAndPlaceSimulator:
 
         obs = observation["observation"]
         ee_pos = obs[0:3].tolist()
+        ee_linear_velocity = obs[20:23].tolist()
         cube_pos = obs[3:6].tolist()
         goal_pos = observation["desired_goal"].tolist()
         gripper_width = float(obs[9] + obs[10])
@@ -238,6 +244,7 @@ class FetchPickAndPlaceSimulator:
         proprioception = Proprioception(
             ee_pos=ee_pos,
             ee_quat=ee_quat,
+            ee_linear_velocity=ee_linear_velocity,
             gripper_width=gripper_width,
             joint_angles=joint_angles,
         )
@@ -245,6 +252,7 @@ class FetchPickAndPlaceSimulator:
         return SimulatorSnapshot(
             ee_pos=ee_pos,
             ee_quat=ee_quat,
+            ee_linear_velocity=ee_linear_velocity,
             cube_pos=cube_pos,
             goal_pos=goal_pos,
             cube_height=cube_height,

@@ -61,7 +61,6 @@ def compute_cbf_residual(
 ) -> float:
     gamma = cfg.CBF.gamma
     return min(
-        next_margins.workspace - ((1.0 - gamma) * current_margins.workspace),
         next_margins.velocity - ((1.0 - gamma) * current_margins.velocity),
         next_margins.joint_limit - ((1.0 - gamma) * current_margins.joint_limit),
     )

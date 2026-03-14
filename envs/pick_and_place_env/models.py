@@ -50,6 +50,10 @@ class Proprioception(_StrictModel):
         default_factory=lambda: [1.0, 0.0, 0.0, 0.0],
         description="End-effector orientation as quaternion [w, x, y, z]",
     )
+    ee_linear_velocity: Vector3 = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0],
+        description="End-effector linear velocity in x/y/z as provided by Fetch observations",
+    )
     gripper_width: float = Field(
         default=0.0,
         ge=0.0,
@@ -117,9 +121,11 @@ class PickAndPlaceAction(Action):
         le=1.0,
         description="Normalized Z control in [-1, 1] for the Fetch action space",
     )
-    gripper: cfg.GripperCommand = Field(
-        default=cfg.GripperCommand.OPEN,
-        description="Desired gripper command for this step",
+    gripper: float = Field(
+        default=1.0,
+        ge=-1.0,
+        le=1.0,
+        description="Normalized Fetch gripper control in [-1, 1]",
     )
     message: Optional[str] = Field(
         default=None,

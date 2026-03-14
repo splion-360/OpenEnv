@@ -97,7 +97,12 @@ def _format_summary(response: Dict[str, Any], state: Any | None = None) -> str:
         lines.append(f"**Done:** `{done}`")
 
     if state is not None:
+        velocity = state.proprioception.ee_linear_velocity
         lines.append("")
+        lines.append(
+            "**EE linear velocity (x,y,z):** "
+            f"`[{velocity[0]:.4f}, {velocity[1]:.4f}, {velocity[2]:.4f}]`"
+        )
         lines.append(f"**CBF intervened:** `{state.cbf_intervened}`")
         lines.append(f"**CBF scale:** `{state.cbf_scale:.3f}`")
         lines.append(f"**CBF residual:** `{state.cbf_residual:.6f}`")
