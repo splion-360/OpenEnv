@@ -19,11 +19,6 @@ from PIL import Image
 from openenv.core.env_server.serialization import serialize_observation
 from openenv.core.env_server.types import EnvironmentMetadata
 
-try:
-    from .. import config as cfg
-except ImportError:
-    import config as cfg  # type: ignore
-
 
 def _decode_image(value: Any) -> Optional[Image.Image]:
     """Decode a base64 image field from the observation payload."""
@@ -73,19 +68,18 @@ def _format_summary(response: Dict[str, Any], state: Any | None = None) -> str:
 
     lines: List[str] = ["# Visualization"]
 
-    phase = observation.get("phase")
-    obs_mode = observation.get("obs_mode")
+    phase = observation.get("metadata", {}).get("phase")
     if phase:
         lines.append(f"**Phase:** `{phase}`")
-    if obs_mode:
-        lines.append(f"**Observation mode:** `{obs_mode}`")
     if "steps_remaining" in observation:
         lines.append(f"**Steps remaining:** `{observation['steps_remaining']}`")
-
-    scene_text = observation.get("scene_text")
-    if scene_text:
-        lines.append("")
-        lines.append(f"**Scene:** {scene_text}")
+    lines.append(f"**Is grasped:** `{observation.get('is_grasped', False)}`")
+    home_ee_pos = observation.get("home_ee_pos")
+    if isinstance(home_ee_pos, list) and len(home_ee_pos) == 3:
+        lines.append(
+            "**Home EE position:** "
+            f"`[{home_ee_pos[0]:.3f}, {home_ee_pos[1]:.3f}, {home_ee_pos[2]:.3f}]`"
+        )
 
     reward = response.get("reward")
     done = response.get("done")
@@ -106,6 +100,7 @@ def _format_summary(response: Dict[str, Any], state: Any | None = None) -> str:
         lines.append(f"**CBF intervened:** `{state.cbf_intervened}`")
         lines.append(f"**CBF scale:** `{state.cbf_scale:.3f}`")
         lines.append(f"**CBF residual:** `{state.cbf_residual:.6f}`")
+        lines.append(f"**Goal reached once:** `{state.goal_reached_once}`")
         lines.append(f"**Proposed action:** {_format_action(state.proposed_action)}")
         lines.append(f"**Executed action:** {_format_action(state.last_action)}")
 
@@ -122,11 +117,10 @@ def build_pick_and_place_gradio_app(
 ) -> gr.Blocks:
     """Build the visualization tab for pick_and_place_env."""
 
-    async def reset_env(obs_mode: str):
+    async def reset_env():
         try:
             observation = await web_manager._run_sync_in_thread_pool(
                 web_manager.env.reset,
-                obs_mode=cfg.ObsMode(obs_mode),
             )
             state = web_manager.env.state
             response = serialize_observation(observation)
@@ -142,7 +136,7 @@ def build_pick_and_place_gradio_app(
                 overhead_image,
                 wrist_image,
                 json.dumps(response, indent=2),
-                f"Environment reset successfully in {obs_mode} mode.",
+                "Environment reset successfully.",
             )
         except Exception as error:
             return ("", None, None, "", f"Error: {error}")
@@ -188,12 +182,6 @@ def build_pick_and_place_gradio_app(
             wrist_image = gr.Image(label="Wrist Camera", interactive=False)
 
         with gr.Group():
-            obs_mode_input = gr.Dropdown(
-                choices=[mode.value for mode in cfg.ObsMode],
-                value=cfg.ObsMode.MULTIMODAL.value,
-                label="Observation Mode",
-                allow_custom_value=False,
-            )
             step_inputs = []
             for field in action_fields:
                 name = field["name"]
@@ -241,7 +229,7 @@ def build_pick_and_place_gradio_app(
 
         reset_button.click(
             fn=reset_env,
-            inputs=[obs_mode_input],
+            inputs=[],
             outputs=[summary, overhead_image, wrist_image, raw_json, status],
         )
         step_button.click(

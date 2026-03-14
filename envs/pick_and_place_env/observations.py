@@ -35,46 +35,31 @@ def detect_phase(
     return cfg.Phase.LIFTING
 
 
-def build_scene_text(state: PickAndPlaceState) -> str:
-    return (
-        f"Phase: {state.phase}. "
-        f"Gripper at ({state.ee_pos[0]:.2f}, {state.ee_pos[1]:.2f}, {state.ee_pos[2]:.2f}). "
-        f"Cube at ({state.cube_pos[0]:.2f}, {state.cube_pos[1]:.2f}, {state.cube_pos[2]:.2f}). "
-        f"Cube height: {state.cube_height:.2f}m. "
-        f"Goal: tray at ({state.goal_pos[0]:.2f}, {state.goal_pos[1]:.2f}, {state.goal_pos[2]:.2f})."
-    )
-
-
 def build_observation(
     state: PickAndPlaceState,
     reward: float,
     done: bool,
-    echoed_message: str = "",
     rgb_overhead: str | None = None,
     rgb_wrist: str | None = None,
 ) -> PickAndPlaceObservation:
-    include_images = state.obs_mode != cfg.ObsMode.STATE
-    include_text = state.obs_mode != cfg.ObsMode.VISION
-
     return PickAndPlaceObservation(
-        rgb_overhead=rgb_overhead if include_images else None,
-        rgb_wrist=rgb_wrist if include_images else None,
-        scene_text=build_scene_text(state) if include_text else "",
-        instruction=cfg.TASK.instruction,
-        phase=state.phase,
-        obs_mode=state.obs_mode,
+        rgb_overhead=rgb_overhead,
+        rgb_wrist=rgb_wrist,
+        instruction=cfg.TASK.instruction_goal,
         steps_remaining=max(0, state.max_steps - state.step_count),
-        proprioception=state.proprioception,
-        reward_breakdown=state.reward_breakdown,
-        safety_margins=state.safety_margins,
-        echoed_message=echoed_message,
-        message_length=len(echoed_message),
+        home_ee_pos=list(state.home_ee_pos),
+        is_grasped=state.gripper_contact,
         done=done,
         reward=reward,
         metadata={
             "step": state.step_count,
             "steps_remaining": max(0, state.max_steps - state.step_count),
             "success": state.success,
+            "phase": state.phase,
+            "proprioception": state.proprioception.model_dump(),
+            "reward_breakdown": state.reward_breakdown.model_dump(),
+            "safety_margins": state.safety_margins.model_dump(),
+            "goal_reached_once": state.goal_reached_once,
             "cbf_intervened": state.cbf_intervened,
             "cbf_scale": state.cbf_scale,
             "cbf_residual": state.cbf_residual,

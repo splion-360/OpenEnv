@@ -12,6 +12,7 @@ OpenEnv interface. It tracks robot, object, and goal state with simple geometry
 until the MuJoCo integration is added.
 """
 
+import math
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -79,24 +80,33 @@ class PickAndPlaceEnvironment(Environment):
 
     SUPPORTS_CONCURRENT_SESSIONS = True
 
-    def __init__(self, max_steps: int = cfg.TASK.max_steps):
+    def __init__(
+        self,
+        max_steps: int = cfg.TASK.max_steps,
+        enable_cbf_filter: bool = cfg.CBF.enable_filter,
+    ):
         """
         Initialize the Pick And Place environment.
 
         Args:
             max_steps: Maximum number of steps per episode
+            enable_cbf_filter: Whether to apply CBF action filtering at runtime
         """
         self._max_steps = max_steps
+        self._enable_cbf_filter = enable_cbf_filter
         self._simulator = FetchPickAndPlaceSimulator(max_episode_steps=max_steps)
         self._goal_radius = self._simulator.distance_threshold
-        self._max_position_delta_meters = self._simulator.position_action_scale_meters
+        self._max_velocity_mps = (
+            math.sqrt(3.0)
+            * self._simulator.position_action_scale_meters
+            / self._simulator.step_dt
+        )
         self._state = self._make_state(snapshot=self._simulator.reset())
 
     def _make_state(
         self,
         snapshot: SimulatorSnapshot,
         episode_id: Optional[str] = None,
-        obs_mode: cfg.ObsMode = cfg.ObsMode.MULTIMODAL,
     ) -> PickAndPlaceState:
         ee_pos = list(snapshot.ee_pos)
         ee_quat = list(snapshot.ee_quat)
@@ -104,13 +114,13 @@ class PickAndPlaceEnvironment(Environment):
         goal_pos = list(snapshot.goal_pos)
         cube_height = snapshot.cube_height
         gripper_contact = snapshot.gripper_contact
-        success = bool(snapshot.info.get("is_success", False))
         proprioception = snapshot.proprioception
         joint_angles = list(proprioception.joint_angles)
         safety = compute_safety_margins(
-            [0.0, 0.0, 0.0],
             ee_pos,
-            max_position_delta_meters=self._max_position_delta_meters,
+            ee_linear_velocity=list(snapshot.ee_linear_velocity),
+            step_dt=self._simulator.step_dt,
+            max_velocity_mps=self._max_velocity_mps,
             joint_limit_margin=self._simulator.compute_joint_limit_margin(joint_angles),
         )
 
@@ -118,11 +128,11 @@ class PickAndPlaceEnvironment(Environment):
         state = PickAndPlaceState(
             episode_id=episode_id or str(uuid4()),
             step_count=0,
-            obs_mode=obs_mode,
             phase=cfg.Phase.REACHING,
             max_steps=self._max_steps,
             ee_pos=list(ee_pos),
             ee_quat=list(ee_quat),
+            home_ee_pos=list(ee_pos),
             cube_pos=list(cube_pos),
             goal_pos=list(goal_pos),
             cube_height=cube_height,
@@ -134,7 +144,8 @@ class PickAndPlaceEnvironment(Environment):
             cbf_intervened=False,
             cbf_scale=1.0,
             cbf_residual=0.0,
-            success=success,
+            success=False,
+            goal_reached_once=False,
         )
         state.phase = detect_phase(state, cube_to_goal, self._goal_radius)
         return state
@@ -151,13 +162,10 @@ class PickAndPlaceEnvironment(Environment):
     ) -> tuple[SimulatorSnapshot, Any, float]:
         candidate_snapshot = self._simulator.peek_step(action)
         candidate_safety = compute_safety_margins(
-            [
-                candidate_snapshot.ee_pos[0] - self._state.ee_pos[0],
-                candidate_snapshot.ee_pos[1] - self._state.ee_pos[1],
-                candidate_snapshot.ee_pos[2] - self._state.ee_pos[2],
-            ],
             list(candidate_snapshot.ee_pos),
-            max_position_delta_meters=self._max_position_delta_meters,
+            ee_linear_velocity=list(candidate_snapshot.ee_linear_velocity),
+            step_dt=self._simulator.step_dt,
+            max_velocity_mps=self._max_velocity_mps,
             joint_limit_margin=self._simulator.compute_joint_limit_margin(
                 candidate_snapshot.proprioception.joint_angles
             ),
@@ -171,21 +179,20 @@ class PickAndPlaceEnvironment(Environment):
     def _filter_action_with_cbf(
         self,
         action: PickAndPlaceAction,
-    ) -> tuple[PickAndPlaceAction, SimulatorSnapshot, Any, float, float]:
+    ) -> tuple[PickAndPlaceAction, Any, float, float]:
         candidate_snapshot, candidate_safety, candidate_residual = (
             self._candidate_safety(action)
         )
         if candidate_residual >= 0.0:
-            return action, candidate_snapshot, candidate_safety, candidate_residual, 1.0
+            return action, candidate_safety, candidate_residual, 1.0
 
         zero_action = scale_action(action, 0.0)
         zero_snapshot, zero_safety, zero_residual = self._candidate_safety(zero_action)
         if zero_residual < 0.0:
-            return zero_action, zero_snapshot, zero_safety, zero_residual, 0.0
+            return zero_action, zero_safety, zero_residual, 0.0
 
         best_scale = 0.0
         best_action = zero_action
-        best_snapshot = zero_snapshot
         best_safety = zero_safety
         best_residual = zero_residual
         low = 0.0
@@ -194,26 +201,35 @@ class PickAndPlaceEnvironment(Environment):
         for _ in range(cfg.CBF.binary_search_iterations):
             scale = (low + high) / 2.0
             scaled_action = scale_action(action, scale)
-            scaled_snapshot, scaled_safety, scaled_residual = self._candidate_safety(
-                scaled_action
-            )
+            _, scaled_safety, scaled_residual = self._candidate_safety(scaled_action)
             if scaled_residual >= 0.0:
                 low = scale
                 best_scale = scale
                 best_action = scaled_action
-                best_snapshot = scaled_snapshot
                 best_safety = scaled_safety
                 best_residual = scaled_residual
             else:
                 high = scale
 
-        return best_action, best_snapshot, best_safety, best_residual, best_scale
+        return best_action, best_safety, best_residual, best_scale
+
+    def _update_task_success(
+        self,
+        cube_to_goal: float,
+        ee_pos: list[float],
+    ) -> tuple[bool, float]:
+        if cube_to_goal <= self._goal_radius:
+            self._state.goal_reached_once = True
+
+        home_distance = self._distance(ee_pos, self._state.home_ee_pos)
+        home_reached = home_distance <= self._goal_radius
+        success = self._state.goal_reached_once and home_reached
+        return success, home_distance
 
     def reset(
         self,
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
-        obs_mode: cfg.ObsMode = cfg.ObsMode.MULTIMODAL,
         **kwargs: Any,
     ) -> PickAndPlaceObservation:
         """
@@ -222,7 +238,6 @@ class PickAndPlaceEnvironment(Environment):
         Args:
             seed: Optional seed for deterministic placement sampling
             episode_id: Optional episode identifier
-            obs_mode: Observation mode for the episode
             **kwargs: Additional reset arguments
 
         Returns:
@@ -232,11 +247,8 @@ class PickAndPlaceEnvironment(Environment):
         self._state = self._make_state(
             snapshot=snapshot,
             episode_id=episode_id,
-            obs_mode=obs_mode,
         )
-        rgb_overhead, rgb_wrist = self._simulator.render_observation_images(
-            self._state.obs_mode
-        )
+        rgb_overhead, rgb_wrist = self._simulator.render_observation_images()
 
         return build_observation(
             self._state,
@@ -266,16 +278,36 @@ class PickAndPlaceEnvironment(Environment):
         del timeout_s, kwargs
 
         proposed_action = action
-        (
-            filtered_action,
-            candidate_snapshot,
-            candidate_safety,
-            candidate_residual,
-            candidate_scale,
-        ) = self._filter_action_with_cbf(proposed_action)
-        snapshot = self._simulator.step(filtered_action)
+        if self._enable_cbf_filter:
+            (
+                filtered_action,
+                candidate_safety,
+                candidate_residual,
+                candidate_scale,
+            ) = self._filter_action_with_cbf(proposed_action)
+            snapshot = self._simulator.step(filtered_action)
+        else:
+            filtered_action = proposed_action
+            candidate_scale = 1.0
+            snapshot = self._simulator.step(filtered_action)
+            candidate_safety = compute_safety_margins(
+                list(snapshot.ee_pos),
+                ee_linear_velocity=list(snapshot.ee_linear_velocity),
+                step_dt=self._simulator.step_dt,
+                max_velocity_mps=self._max_velocity_mps,
+                joint_limit_margin=self._simulator.compute_joint_limit_margin(
+                    snapshot.proprioception.joint_angles
+                ),
+            )
+            candidate_residual = compute_cbf_residual(
+                self._state.safety_margins,
+                candidate_safety,
+            )
         cube_to_goal = self._distance(snapshot.cube_pos, snapshot.goal_pos)
-        success = bool(snapshot.info.get("is_success", False))
+        success, home_distance = self._update_task_success(
+            cube_to_goal=cube_to_goal,
+            ee_pos=list(snapshot.ee_pos),
+        )
         self._state.step_count += 1
         self._state.ee_pos = list(snapshot.ee_pos)
         self._state.ee_quat = list(snapshot.ee_quat)
@@ -286,7 +318,9 @@ class PickAndPlaceEnvironment(Environment):
         self._state.success = success
         self._state.proposed_action = proposed_action
         self._state.last_action = filtered_action
-        self._state.cbf_intervened = filtered_action != proposed_action
+        self._state.cbf_intervened = self._enable_cbf_filter and (
+            filtered_action != proposed_action
+        )
         self._state.cbf_scale = candidate_scale
         self._state.cbf_residual = candidate_residual
         self._state.proprioception = snapshot.proprioception
@@ -306,19 +340,18 @@ class PickAndPlaceEnvironment(Environment):
         )
 
         done = self._state.success or snapshot.terminated or snapshot.truncated
-        echoed_message = proposed_action.message or ""
-        rgb_overhead, rgb_wrist = self._simulator.render_observation_images(
-            self._state.obs_mode
-        )
+        rgb_overhead, rgb_wrist = self._simulator.render_observation_images()
 
-        return build_observation(
+        observation = build_observation(
             self._state,
             reward=reward,
             done=done,
-            echoed_message=echoed_message,
             rgb_overhead=rgb_overhead,
             rgb_wrist=rgb_wrist,
         )
+        observation.metadata["home_distance"] = home_distance
+        observation.metadata["home_reached"] = home_distance <= self._goal_radius
+        return observation
 
     def __del__(self) -> None:
         try:

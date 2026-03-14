@@ -90,9 +90,6 @@ class PickAndPlaceEnv(
         if action.metadata:
             payload["metadata"] = action.metadata
 
-        # Keep the scaffold server usable until the real server step lands.
-        payload["message"] = action.message or ""
-
         return payload
 
     def _parse_result(
@@ -112,21 +109,10 @@ class PickAndPlaceEnv(
         observation = PickAndPlaceObservation(
             rgb_overhead=obs_data.get("rgb_overhead"),
             rgb_wrist=obs_data.get("rgb_wrist"),
-            scene_text=obs_data.get("scene_text", ""),
-            instruction=obs_data.get("instruction", cfg.TASK.instruction),
-            phase=obs_data.get("phase", cfg.Phase.REACHING),
-            obs_mode=obs_data.get("obs_mode", cfg.ObsMode.MULTIMODAL),
-            proprioception=self._parse_proprioception(
-                obs_data.get("proprioception", {})
-            ),
-            reward_breakdown=self._parse_reward_breakdown(
-                obs_data.get("reward_breakdown", {})
-            ),
-            safety_margins=self._parse_safety_margins(
-                obs_data.get("safety_margins", {})
-            ),
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
+            instruction=obs_data.get("instruction", cfg.TASK.instruction_goal),
+            steps_remaining=obs_data.get("steps_remaining", cfg.TASK.max_steps),
+            home_ee_pos=obs_data.get("home_ee_pos", [0.0, 0.0, 0.0]),
+            is_grasped=obs_data.get("is_grasped", False),
             done=payload.get("done", False),
             reward=payload.get("reward"),
             metadata=obs_data.get("metadata", {}),
@@ -151,11 +137,11 @@ class PickAndPlaceEnv(
         return PickAndPlaceState(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),
-            obs_mode=payload.get("obs_mode", cfg.ObsMode.MULTIMODAL),
             phase=payload.get("phase", cfg.Phase.REACHING),
             max_steps=payload.get("max_steps", cfg.TASK.max_steps),
             ee_pos=payload.get("ee_pos", [0.0, 0.0, 0.0]),
             ee_quat=payload.get("ee_quat", [1.0, 0.0, 0.0, 0.0]),
+            home_ee_pos=payload.get("home_ee_pos", [0.0, 0.0, 0.0]),
             cube_pos=payload.get("cube_pos", [0.0, 0.0, 0.0]),
             goal_pos=payload.get("goal_pos", [0.0, 0.0, 0.0]),
             cube_height=payload.get("cube_height", 0.0),
@@ -175,4 +161,5 @@ class PickAndPlaceEnv(
                 else None
             ),
             success=payload.get("success", False),
+            goal_reached_once=payload.get("goal_reached_once", False),
         )

@@ -5,19 +5,8 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from enum import StrEnum
 from dataclasses import dataclass
-
-
-class ObsMode(StrEnum):
-    VISION = "vision"
-    STATE = "state"
-    MULTIMODAL = "multimodal"
-
-
-class GripperCommand(StrEnum):
-    OPEN = "open"
-    CLOSE = "close"
+from enum import StrEnum
 
 
 class Phase(StrEnum):
@@ -29,7 +18,7 @@ class Phase(StrEnum):
 
 @dataclass(frozen=True)
 class TaskConfig:
-    instruction: str = "Pick up the cube and place it in the tray."
+    instruction_goal: str = "Move the cube to the target position, then return the gripper to the home position."
     max_steps: int = 100
 
 
@@ -58,6 +47,7 @@ class RewardConfig:
 
 @dataclass(frozen=True)
 class CBFConfig:
+    enable_filter: bool = False
     gamma: float = 0.2
     binary_search_iterations: int = 8
 

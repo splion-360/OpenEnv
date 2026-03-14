@@ -177,11 +177,7 @@ class FetchPickAndPlaceSimulator:
 
     def render_observation_images(
         self,
-        obs_mode: cfg.ObsMode,
     ) -> tuple[str | None, str | None]:
-        if obs_mode == cfg.ObsMode.STATE:
-            return None, None
-
         return (
             self._render_camera(FETCH.overhead_camera_name),
             self._render_camera(FETCH.wrist_camera_name),

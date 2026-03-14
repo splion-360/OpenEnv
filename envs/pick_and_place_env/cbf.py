@@ -22,9 +22,10 @@ except ImportError:
 
 
 def compute_safety_margins(
-    delta: list[float],
     position: list[float],
-    max_position_delta_meters: float,
+    ee_linear_velocity: list[float],
+    step_dt: float,
+    max_velocity_mps: float,
     joint_limit_margin: float,
 ) -> SafetyMargins:
     workspace_margin = min(
@@ -35,7 +36,8 @@ def compute_safety_margins(
         position[2] - cfg.SAFETY.workspace_low[2],
         cfg.SAFETY.workspace_high[2] - position[2],
     )
-    velocity_margin = max_position_delta_meters - math.dist(delta, [0.0, 0.0, 0.0])
+    ee_speed_mps = math.dist(ee_linear_velocity, [0.0, 0.0, 0.0]) / max(step_dt, 1e-9)
+    velocity_margin = max_velocity_mps - ee_speed_mps
 
     return SafetyMargins(
         workspace=workspace_margin,
@@ -51,7 +53,6 @@ def scale_action(action: PickAndPlaceAction, scale: float) -> PickAndPlaceAction
         dy=action.dy * scale,
         dz=action.dz * scale,
         gripper=action.gripper,
-        message=action.message,
     )
 
 

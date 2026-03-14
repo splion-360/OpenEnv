@@ -4,13 +4,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Data models for the Pick And Place environment.
-
-These models define the wire contract for a MuJoCo-based pick-and-place task.
-Legacy scaffold fields are kept temporarily so the existing placeholder server
-continues to boot until the server/client migration is completed.
-"""
+"""Data models for the Pick And Place environment."""
 
 from __future__ import annotations
 
@@ -127,14 +121,10 @@ class PickAndPlaceAction(Action):
         le=1.0,
         description="Normalized Fetch gripper control in [-1, 1]",
     )
-    message: Optional[str] = Field(
-        default=None,
-        description="Legacy scaffold field kept temporarily for compatibility",
-    )
 
 
 class PickAndPlaceObservation(Observation):
-    """Multimodal observation returned by the environment."""
+    """Policy-facing multimodal observation."""
 
     rgb_overhead: Optional[str] = Field(
         default=None,
@@ -144,57 +134,28 @@ class PickAndPlaceObservation(Observation):
         default=None,
         description="Base64-encoded wrist-camera RGB image",
     )
-    scene_text: str = Field(
-        default="",
-        description="Natural language description of the current scene",
-    )
     instruction: str = Field(
-        default=cfg.TASK.instruction,
+        default=cfg.TASK.instruction_goal,
         description="Task instruction shown to the policy",
-    )
-    phase: cfg.Phase = Field(
-        default=cfg.Phase.REACHING,
-        description="Current deterministic task phase",
-    )
-    obs_mode: cfg.ObsMode = Field(
-        default=cfg.ObsMode.MULTIMODAL,
-        description="Observation mode active for the current episode",
     )
     steps_remaining: int = Field(
         default=cfg.TASK.max_steps,
         ge=0,
         description="Number of environment steps remaining before truncation",
     )
-    proprioception: Proprioception = Field(
-        default_factory=Proprioception,
-        description="Robot proprioceptive features",
+    home_ee_pos: Vector3 = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0],
+        description="Home end-effector position to return to after placement",
     )
-    reward_breakdown: RewardBreakdown = Field(
-        default_factory=RewardBreakdown,
-        description="Reward components for the latest step",
-    )
-    safety_margins: SafetyMargins = Field(
-        default_factory=SafetyMargins,
-        description="Latest CBF safety margins",
-    )
-    echoed_message: str = Field(
-        default="",
-        description="Legacy scaffold field kept temporarily for compatibility",
-    )
-    message_length: int = Field(
-        default=0,
-        ge=0,
-        description="Legacy scaffold field kept temporarily for compatibility",
+    is_grasped: bool = Field(
+        default=False,
+        description="Whether the cube is currently grasped by the gripper",
     )
 
 
 class PickAndPlaceState(State):
     """Environment state tracked across an episode."""
 
-    obs_mode: cfg.ObsMode = Field(
-        default=cfg.ObsMode.MULTIMODAL,
-        description="Observation mode configured for the episode",
-    )
     phase: cfg.Phase = Field(
         default=cfg.Phase.REACHING,
         description="Current task phase",
@@ -211,6 +172,10 @@ class PickAndPlaceState(State):
     ee_quat: Quaternion = Field(
         default_factory=lambda: [1.0, 0.0, 0.0, 0.0],
         description="End-effector orientation quaternion [w, x, y, z]",
+    )
+    home_ee_pos: Vector3 = Field(
+        default_factory=lambda: [0.0, 0.0, 0.0],
+        description="Episode home end-effector position [x, y, z]",
     )
     cube_pos: Vector3 = Field(
         default_factory=lambda: [0.0, 0.0, 0.0],
@@ -265,6 +230,10 @@ class PickAndPlaceState(State):
     success: bool = Field(
         default=False,
         description="Whether the task has been completed successfully",
+    )
+    goal_reached_once: bool = Field(
+        default=False,
+        description="Whether cube has reached goal at least once this episode",
     )
 
 

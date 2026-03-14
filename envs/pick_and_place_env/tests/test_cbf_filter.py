@@ -44,9 +44,9 @@ def test_simulator_peek_step_restores_state() -> None:
 
 
 def test_environment_step_filters_unsafe_nominal_action() -> None:
-    environment = PickAndPlaceEnvironment()
+    environment = PickAndPlaceEnvironment(enable_cbf_filter=True)
     try:
-        environment.reset(seed=0, obs_mode="state")
+        environment.reset(seed=0)
 
         nominal_action = PickAndPlaceAction(
             dx=1.0,
@@ -97,3 +97,34 @@ def test_compute_joint_limit_margin_matches_limited_fetch_joints() -> None:
         assert np.isclose(computed_margin, min(limited_joint_margins))
     finally:
         simulator.close()
+
+
+def test_task_success_requires_goal_then_return_home() -> None:
+    environment = PickAndPlaceEnvironment(enable_cbf_filter=False)
+    try:
+        environment.reset(seed=0)
+        home = list(environment.state.home_ee_pos)
+        away_from_home = [home[0] + 0.20, home[1], home[2]]
+
+        success, _ = environment._update_task_success(
+            cube_to_goal=0.20,
+            ee_pos=away_from_home,
+        )
+        assert success is False
+        assert environment.state.goal_reached_once is False
+
+        success, _ = environment._update_task_success(
+            cube_to_goal=0.0,
+            ee_pos=away_from_home,
+        )
+        assert success is False
+        assert environment.state.goal_reached_once is True
+
+        success, home_distance = environment._update_task_success(
+            cube_to_goal=0.20,
+            ee_pos=home,
+        )
+        assert home_distance <= environment._goal_radius
+        assert success is True
+    finally:
+        environment._simulator.close()
