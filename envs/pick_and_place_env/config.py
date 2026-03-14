@@ -35,14 +35,18 @@ class SafetyConfig:
 
 @dataclass(frozen=True)
 class RewardConfig:
-    format_weight: float = 1.0
-    bounds_weight: float = 0.5
     reach_weight: float = 1.0
     grasp_weight: float = 2.0
     lift_weight: float = 1.5
     place_weight: float = 2.0
+    phase_transition_weight: float = 1.0
+    approach_velocity_weight: float = 0.4
+    place_velocity_weight: float = 0.4
     success_weight: float = 10.0
-    cbf_weight: float = 0.8
+    approach_distance_threshold: float = 0.08
+    place_distance_threshold: float = 0.08
+    max_safe_approach_speed_mps: float = 0.25
+    max_safe_place_speed_mps: float = 0.20
 
 
 @dataclass(frozen=True)

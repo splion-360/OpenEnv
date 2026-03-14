@@ -6,6 +6,7 @@
 
 import base64
 import io
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -107,6 +108,7 @@ class FetchPickAndPlaceSimulator:
             | mujoco.mjtState.mjSTATE_MOCAP_QUAT
             | mujoco.mjtState.mjSTATE_CTRL
         )
+        self._validate_render_backend()
 
     def reset(self, seed: int | None = None) -> SimulatorSnapshot:
         observation, info = self._env.reset(seed=seed)
@@ -278,6 +280,18 @@ class FetchPickAndPlaceSimulator:
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+    def _validate_render_backend(self) -> None:
+        try:
+            self._render_camera(FETCH.overhead_camera_name)
+        except Exception as error:
+            backend = os.getenv("MUJOCO_GL", "<unset>")
+            raise RuntimeError(
+                "MuJoCo offscreen rendering backend is not available. "
+                f"Current MUJOCO_GL={backend}. "
+                "Set MUJOCO_GL=egl (preferred) or MUJOCO_GL=osmesa before starting "
+                "the server."
+            ) from error
 
     def _get_gripper_quaternion(self) -> list[float]:
         env = self._env.unwrapped

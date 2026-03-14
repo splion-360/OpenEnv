@@ -50,14 +50,14 @@ class PickAndPlaceEnv(
     @staticmethod
     def _parse_reward_breakdown(payload: Dict[str, Any]) -> RewardBreakdown:
         return RewardBreakdown(
-            format=payload.get("format", 0.0),
-            bounds=payload.get("bounds", 0.0),
             reach=payload.get("reach", 0.0),
             grasp=payload.get("grasp", 0.0),
             lift=payload.get("lift", 0.0),
             place=payload.get("place", 0.0),
+            phase_transition=payload.get("phase_transition", 0.0),
+            approach_velocity=payload.get("approach_velocity", 0.0),
+            place_velocity=payload.get("place_velocity", 0.0),
             success=payload.get("success", 0.0),
-            cbf=payload.get("cbf", 0.0),
             total=payload.get("total", 0.0),
         )
 

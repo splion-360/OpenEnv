@@ -57,7 +57,6 @@ def build_observation(
             "success": state.success,
             "phase": state.phase,
             "proprioception": state.proprioception.model_dump(),
-            "reward_breakdown": state.reward_breakdown.model_dump(),
             "safety_margins": state.safety_margins.model_dump(),
             "goal_reached_once": state.goal_reached_once,
             "cbf_intervened": state.cbf_intervened,

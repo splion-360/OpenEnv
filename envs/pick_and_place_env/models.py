@@ -62,14 +62,20 @@ class Proprioception(_StrictModel):
 class RewardBreakdown(_StrictModel):
     """Reward components logged for debugging and training analysis."""
 
-    format: float = Field(default=0.0, description="Reward for valid action format")
-    bounds: float = Field(default=0.0, description="Reward for staying within limits")
     reach: float = Field(default=0.0, description="Dense reaching reward")
     grasp: float = Field(default=0.0, description="Binary grasp reward")
     lift: float = Field(default=0.0, description="Dense lifting reward")
     place: float = Field(default=0.0, description="Dense placing reward")
+    phase_transition: float = Field(
+        default=0.0, description="Discrete bonus when advancing phase"
+    )
+    approach_velocity: float = Field(
+        default=0.0, description="Penalty for moving too fast near cube"
+    )
+    place_velocity: float = Field(
+        default=0.0, description="Penalty for moving too fast near goal"
+    )
     success: float = Field(default=0.0, description="Sparse task completion reward")
-    cbf: float = Field(default=0.0, description="Control barrier function reward")
     total: float = Field(default=0.0, description="Total reward for the last step")
 
 

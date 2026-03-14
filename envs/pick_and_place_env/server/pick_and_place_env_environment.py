@@ -304,6 +304,7 @@ class PickAndPlaceEnvironment(Environment):
                 candidate_safety,
             )
         cube_to_goal = self._distance(snapshot.cube_pos, snapshot.goal_pos)
+        previous_phase = self._state.phase
         success, home_distance = self._update_task_success(
             cube_to_goal=cube_to_goal,
             ee_pos=list(snapshot.ee_pos),
@@ -325,19 +326,25 @@ class PickAndPlaceEnvironment(Environment):
         self._state.cbf_residual = candidate_residual
         self._state.proprioception = snapshot.proprioception
         self._state.safety_margins = candidate_safety
-        self._state.reward_breakdown = compute_reward_breakdown(
-            gripper_to_cube=self._distance(snapshot.ee_pos, snapshot.cube_pos),
-            cube_to_goal=cube_to_goal,
-            cube_height=snapshot.cube_height,
-            gripper_contact=snapshot.gripper_contact,
-            success=success,
-        )
-        reward = self._state.reward_breakdown.total
-        self._state.phase = detect_phase(
+        current_phase = detect_phase(
             self._state,
             cube_to_goal,
             self._goal_radius,
         )
+        self._state.reward_breakdown = compute_reward_breakdown(
+            previous_phase=previous_phase,
+            current_phase=current_phase,
+            gripper_to_cube=self._distance(snapshot.ee_pos, snapshot.cube_pos),
+            cube_to_goal=cube_to_goal,
+            cube_height=snapshot.cube_height,
+            gripper_contact=snapshot.gripper_contact,
+            goal_reached_once=self._state.goal_reached_once,
+            ee_linear_velocity=list(snapshot.ee_linear_velocity),
+            step_dt=self._simulator.step_dt,
+            success=success,
+        )
+        reward = self._state.reward_breakdown.total
+        self._state.phase = current_phase
 
         done = self._state.success or snapshot.terminated or snapshot.truncated
         rgb_overhead, rgb_wrist = self._simulator.render_observation_images()
