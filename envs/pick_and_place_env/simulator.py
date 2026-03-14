@@ -247,7 +247,7 @@ class FetchPickAndPlaceSimulator:
         ee_linear_velocity = obs[20:23].tolist()
         cube_pos = obs[3:6].tolist()
         goal_pos = observation["desired_goal"].tolist()
-        gripper_width = float(obs[9] + obs[10])
+        gripper_width = max(0.0, float(obs[9] + obs[10]))
 
         ee_quat = self._get_gripper_quaternion()
         joint_angles = self._get_arm_joint_angles()
